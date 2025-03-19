@@ -1,0 +1,85 @@
+configuration {
+  display-drun: "Apps";
+  drun-display-format: "{icon} {name}";
+  font: "JetBrainsMono Nerd Font 12";
+  modi: "drun";
+  show-icons: true;
+  terminal: "kitty";
+}
+
+@theme "/dev/null"
+
+* {
+  bg: #1B1D22;
+  bg-alt: #6A7B92;
+  fg: #E6E8EE;
+  fg-alt: #E4E4E4;
+
+  background-color: @bg;
+
+  border: 0;
+  margin: 0;
+  padding: 0;
+  spacing: 0;
+}
+
+window {
+  width: 45%;
+  background-color: @bg-alt;
+  padding: 2;
+}
+
+mainbox {
+  background-color: @bg;
+  padding: 5;
+}
+
+element {
+  padding: 10;
+  text-color: @fg-alt;
+}
+
+element selected {
+  background-color: @bg-alt;
+  text-color: @fg;
+}
+
+element-text {
+  background-color: inherit;
+  text-color: inherit;
+  vertical-align: 0.5;
+}
+
+element-icon {
+  background-color: inherit;
+  text-color: inherit;
+  size: 25;
+  vertical-align: 0.5;
+}
+
+entry {
+  background-color: @bg-alt;
+  padding: 10;
+  text-color: @fg;
+  padding: 10 10 10 45;
+}
+
+inputbar {
+  children: [ entry ];
+  padding: 0 0 5 0;
+}
+
+listview {
+  background-color: @bg;
+  lines: 8;
+  scrollbar: true;
+}
+
+scrollbar {
+    width:        10px ;
+    border:       1px;
+    border-color: @bg-alt;
+    handle-color: @bg-alt;
+    handle-width: 5px ;
+    margin:       0 0 0 5;
+}

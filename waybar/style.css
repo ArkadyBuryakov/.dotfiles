@@ -1,0 +1,62 @@
+*{
+    font-family: JetBrainsMono Nerd Font;
+    font-size: 13px;
+    min-height: 0;
+    color: white;
+}
+
+window#waybar {
+    background-color: rgba(24, 24, 24, 0.3);
+}
+
+#workspaces{
+    margin-top: 3px;
+    margin-bottom: 3px;
+    margin-right: 3px;
+    margin-left: 3px;
+}
+
+#workspaces button{
+    border-radius: 0px;
+    margin-right: 0px;
+    padding: 0px 10px;
+    font-weight: bolder;
+}
+
+#workspaces button.active, #workspaces button.focused{
+    padding: 0 10px;
+    background: #6A7B92;
+}
+
+#workspaces button:hover{
+    box-shadow: rgba(6, 24, 44, 0.4) 0px 0px 0px 2px, rgba(6, 24, 44, 0.65) 0px 4px 6px -1px, rgba(255, 255, 255, 0.08) 0px 1px 0px inset;    
+    background: #6A7B92;
+}
+
+#tray,
+#mpd,
+#custom-weather,
+#cpu, 
+#temperature, 
+#memory,
+#sway-mode,
+#backlight, 
+#pulseaudio, 
+#custom-vpn,
+#disk,
+#custom-recorder,
+#custom-audiorec,
+#battery, 
+#clock, 
+#custom-power,
+#wireplumber,
+#bluetooth,
+#network {
+	padding: 0 10px;
+}
+
+#battery.urgent,
+#battery.warning,
+#battery.critical {
+  color: #B53F36
+}

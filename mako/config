@@ -1,0 +1,15 @@
+on-button-left=invoke-default-action
+on-button-right=dismiss-all
+default-timeout=10000
+
+anchor=bottom-right
+
+font=JetBrainsMono Nerd Font 10
+background-color=#1B1D22FF
+text-color=#E6E8EEFF
+margin=4
+outer-margin=14,10
+padding=6,8,6,6
+border-size=2
+border-color=#6A7B92FF
+
