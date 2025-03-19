@@ -17,3 +17,17 @@
 - grimblast - screenshot utility
 - swappy - image annotation tool
 - ttf-jetbrains-mono-nerd - nerd patched font for a most of UI
+
+## Demo
+
+### Overview
+![](./.demo/overview.png)
+
+### App launcher and notification
+![](./.demo/rofi_mako.png)
+
+### WLogout menu
+![](./.demo/wlogout.png)
+
+### Lock screen
+![](./.demo/hyprlock.png)
