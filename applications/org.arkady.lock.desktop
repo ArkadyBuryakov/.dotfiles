@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Lock
+Exec=hyprlock
+Categories=Session Management
+Icon=~/.config/wlogout/icons/lock.png
+Version=1.0
+Type=Application
+Terminal=false
+

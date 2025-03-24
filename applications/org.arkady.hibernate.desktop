@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Hibernate
+Exec=systemctl hibernate
+Categories=Session Management
+Icon=~/.config/wlogout/icons/hibernate.png
+Version=1.0
+Type=Application
+Terminal=false
+

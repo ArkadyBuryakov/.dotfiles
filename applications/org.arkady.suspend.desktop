@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Suspend
+Exec=systemctl suspend
+Categories=Session Management, Sleep
+Icon=~/.config/wlogout/icons/suspend.png
+Version=1.0
+Type=Application
+Terminal=false
+

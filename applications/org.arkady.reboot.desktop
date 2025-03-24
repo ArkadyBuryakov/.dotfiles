@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Reboot
+Exec=systemctl reboot
+Categories=Session Management
+Icon=~/.config/wlogout/icons/reboot.png
+Version=1.0
+Type=Application
+Terminal=false
+Keywords=Restart;Reboot
