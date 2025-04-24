@@ -17,6 +17,7 @@
 - grimblast - screenshot utility
 - swappy - image annotation tool
 - ttf-jetbrains-mono-nerd - nerd patched font for a most of UI
+- keyd - daemon for custom keyboard behaviour
 
 ## Demo
 
