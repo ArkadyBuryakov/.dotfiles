@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Shutdown
-Exec=systemstl poweroff
+Exec=systemctl poweroff
 Categories=Session Management
 Icon=~/.config/wlogout/icons/shutdown.png
 Version=1.0
