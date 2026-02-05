@@ -17,7 +17,12 @@ _worktree_branches() {
 }
 
 _worktree_names() {
-    git worktree list --porcelain 2>/dev/null | grep '^worktree ' | sed 's|^worktree ||' | xargs -I{} basename {}
+    # Only include worktrees inside a "worktrees" folder (exclude main repo)
+    git worktree list --porcelain 2>/dev/null | grep '^worktree ' | sed 's|^worktree ||' | while read -r p; do
+        if [[ "$(basename "$(dirname "$p")")" == "worktrees" ]]; then
+            basename "$p"
+        fi
+    done
 }
 
 _worktree() {
