@@ -1,0 +1,270 @@
+#!/usr/bin/env bash
+
+# Worktree TUI - Interactive interface for worktree management
+# Uses fzf for mode switching and selection
+
+set -euo pipefail
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKTREE_CMD="$SCRIPT_DIR/worktree"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+# Mode definitions
+MODES=("create" "open" "checkout" "delete")
+MODE_LABELS=("CREATE" "OPEN" "CHECKOUT" "DELETE")
+
+error() {
+    echo -e "${RED}Error:${NC} $1" >&2
+    exit 1
+}
+
+# Check dependencies
+check_deps() {
+    if ! command -v fzf &>/dev/null; then
+        error "fzf is required but not installed. Install with: pacman -S fzf"
+    fi
+
+    if ! git rev-parse --is-inside-work-tree &>/dev/null 2>&1; then
+        error "Not inside a git repository"
+    fi
+}
+
+# Get data based on mode
+get_data() {
+    local mode="$1"
+    case "$mode" in
+        create)
+            "$WORKTREE_CMD" --complete create
+            ;;
+        open|checkout|delete)
+            "$WORKTREE_CMD" --complete open
+            ;;
+    esac
+}
+
+# Build header showing mode tabs
+build_header() {
+    local current_mode="$1"
+    local header=""
+
+    for i in "${!MODES[@]}"; do
+        local mode="${MODES[$i]}"
+        local label="${MODE_LABELS[$i]}"
+
+        if [[ "$mode" == "$current_mode" ]]; then
+            header+="[${label}]"
+        else
+            header+=" ${label} "
+        fi
+
+        if [[ $i -lt $((${#MODES[@]} - 1)) ]]; then
+            header+=" │ "
+        fi
+    done
+
+    echo "$header"
+}
+
+# Get mode index
+get_mode_index() {
+    local mode="$1"
+    for i in "${!MODES[@]}"; do
+        if [[ "${MODES[$i]}" == "$mode" ]]; then
+            echo "$i"
+            return
+        fi
+    done
+    echo "0"
+}
+
+# Switch to next/previous mode
+switch_mode() {
+    local current="$1"
+    local direction="$2"
+    local idx
+    idx=$(get_mode_index "$current")
+    local num_modes=${#MODES[@]}
+
+    if [[ "$direction" == "right" ]]; then
+        idx=$(( (idx + 1) % num_modes ))
+    else
+        idx=$(( (idx - 1 + num_modes) % num_modes ))
+    fi
+
+    echo "${MODES[$idx]}"
+}
+
+# Get prompt based on mode
+get_prompt() {
+    local mode="$1"
+    case "$mode" in
+        create)
+            echo "Branch/New: "
+            ;;
+        open)
+            echo "Open: "
+            ;;
+        checkout)
+            echo "Checkout: "
+            ;;
+        delete)
+            echo "Delete: "
+            ;;
+    esac
+}
+
+# Get fzf options based on mode
+get_fzf_bind() {
+    local mode="$1"
+    # For create mode, allow accepting typed query if no match
+    if [[ "$mode" == "create" ]]; then
+        echo "enter:accept-or-print-query"
+    else
+        echo "enter:accept"
+    fi
+}
+
+# Run fzf for selection
+run_fzf() {
+    local mode="$1"
+    local data="$2"
+    local header
+    header=$(build_header "$mode")
+    local prompt
+    prompt=$(get_prompt "$mode")
+    local bind
+    bind=$(get_fzf_bind "$mode")
+
+    local fzf_opts=(
+        --prompt="$prompt"
+        --header="$header"
+        --header-first
+        --expect="left,right,esc"
+        --bind="$bind"
+        --no-info
+        --layout=reverse
+        --height=~50%
+        --border=rounded
+        --margin=1,2
+        --padding=1
+    )
+
+    # Handle empty data
+    if [[ -z "$data" ]]; then
+        if [[ "$mode" == "create" ]]; then
+            # Still allow typing for create mode
+            echo "" | fzf "${fzf_opts[@]}" --print-query 2>/dev/null || true
+        else
+            # Show message for other modes
+            echo "(no worktrees)" | fzf "${fzf_opts[@]}" --disabled 2>/dev/null || true
+        fi
+    else
+        echo "$data" | fzf "${fzf_opts[@]}" --print-query 2>/dev/null || true
+    fi
+}
+
+# Parse fzf output
+# Returns: query, key, selection (newline separated)
+parse_fzf_output() {
+    local output="$1"
+    echo "$output"
+}
+
+# Execute action based on mode and selection
+execute_action() {
+    local mode="$1"
+    local selection="$2"
+
+    if [[ -z "$selection" || "$selection" == "(no worktrees)" ]]; then
+        return 1
+    fi
+
+    case "$mode" in
+        create)
+            "$WORKTREE_CMD" create "$selection"
+            ;;
+        open)
+            "$WORKTREE_CMD" open "$selection"
+            ;;
+        checkout)
+            "$WORKTREE_CMD" checkout "$selection"
+            ;;
+        delete)
+            # Delete needs terminal interaction for confirmation
+            "$WORKTREE_CMD" delete "$selection"
+            ;;
+    esac
+}
+
+# Main loop
+main() {
+    check_deps
+
+    local mode="${1:-open}"
+
+    # Validate initial mode
+    local valid_mode=false
+    for m in "${MODES[@]}"; do
+        if [[ "$m" == "$mode" ]]; then
+            valid_mode=true
+            break
+        fi
+    done
+
+    if [[ "$valid_mode" == "false" ]]; then
+        mode="open"
+    fi
+
+    while true; do
+        local data
+        data=$(get_data "$mode")
+
+        local result
+        result=$(run_fzf "$mode" "$data")
+
+        # Parse result (query on line 1, key on line 2, selection on line 3)
+        local query key selection
+        query=$(echo "$result" | sed -n '1p')
+        key=$(echo "$result" | sed -n '2p')
+        selection=$(echo "$result" | sed -n '3p')
+
+        case "$key" in
+            left)
+                mode=$(switch_mode "$mode" "left")
+                ;;
+            right)
+                mode=$(switch_mode "$mode" "right")
+                ;;
+            esc)
+                exit 0
+                ;;
+            *)
+                # Enter was pressed
+                # For create mode, prefer selection, fall back to query
+                if [[ "$mode" == "create" ]]; then
+                    if [[ -n "$selection" ]]; then
+                        execute_action "$mode" "$selection"
+                    elif [[ -n "$query" ]]; then
+                        execute_action "$mode" "$query"
+                    fi
+                else
+                    if [[ -n "$selection" ]]; then
+                        execute_action "$mode" "$selection"
+                    fi
+                fi
+                exit 0
+                ;;
+        esac
+    done
+}
+
+main "$@"
