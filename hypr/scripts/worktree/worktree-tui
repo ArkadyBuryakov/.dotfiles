@@ -133,6 +133,13 @@ get_fzf_bind() {
     fi
 }
 
+# Check if any worktrees exist
+has_worktrees() {
+    local worktrees
+    worktrees=$("$WORKTREE_CMD" --complete open)
+    [[ -n "$worktrees" ]]
+}
+
 # Run fzf for selection
 run_fzf() {
     local mode="$1"
@@ -156,19 +163,18 @@ run_fzf() {
         --border=rounded
         --margin=1,2
         --padding=1
+        --print-query
     )
 
-    # Handle empty data
-    if [[ -z "$data" ]]; then
-        if [[ "$mode" == "create" ]]; then
-            # Still allow typing for create mode
-            echo "" | fzf "${fzf_opts[@]}" --print-query 2>/dev/null || true
-        else
-            # Show message for other modes
-            echo "(no worktrees)" | fzf "${fzf_opts[@]}" --disabled 2>/dev/null || true
-        fi
+    # Handle empty data for non-create modes
+    if [[ -z "$data" && "$mode" != "create" ]]; then
+        # Show placeholder but keep navigation working
+        echo "(no worktrees - use CREATE mode)" | fzf "${fzf_opts[@]}" 2>/dev/null || true
+    elif [[ -z "$data" ]]; then
+        # Create mode with no data - still allow typing
+        echo "" | fzf "${fzf_opts[@]}" 2>/dev/null || true
     else
-        echo "$data" | fzf "${fzf_opts[@]}" --print-query 2>/dev/null || true
+        echo "$data" | fzf "${fzf_opts[@]}" 2>/dev/null || true
     fi
 }
 
@@ -184,7 +190,7 @@ execute_action() {
     local mode="$1"
     local selection="$2"
 
-    if [[ -z "$selection" || "$selection" == "(no worktrees)" ]]; then
+    if [[ -z "$selection" || "$selection" == "(no worktrees - use CREATE mode)" ]]; then
         return 1
     fi
 
@@ -209,19 +215,29 @@ execute_action() {
 main() {
     check_deps
 
-    local mode="${1:-open}"
+    local mode="${1:-}"
 
-    # Validate initial mode
-    local valid_mode=false
-    for m in "${MODES[@]}"; do
-        if [[ "$m" == "$mode" ]]; then
-            valid_mode=true
-            break
+    # Validate initial mode if provided
+    if [[ -n "$mode" ]]; then
+        local valid_mode=false
+        for m in "${MODES[@]}"; do
+            if [[ "$m" == "$mode" ]]; then
+                valid_mode=true
+                break
+            fi
+        done
+        if [[ "$valid_mode" == "false" ]]; then
+            mode=""
         fi
-    done
+    fi
 
-    if [[ "$valid_mode" == "false" ]]; then
-        mode="open"
+    # Default mode: create if no worktrees, otherwise open
+    if [[ -z "$mode" ]]; then
+        if has_worktrees; then
+            mode="open"
+        else
+            mode="create"
+        fi
     fi
 
     while true; do

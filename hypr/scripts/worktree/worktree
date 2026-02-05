@@ -12,136 +12,142 @@ YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
 error() {
-    echo -e "${RED}Error:${NC} $1" >&2
-    return 1
+  echo -e "${RED}Error:${NC} $1" >&2
+  return 1
 }
 
 success() {
-    echo -e "${GREEN}$1${NC}" >&2
+  echo -e "${GREEN}$1${NC}" >&2
 }
 
 warn() {
-    echo -e "${YELLOW}$1${NC}" >&2
+  echo -e "${YELLOW}$1${NC}" >&2
 }
 
 # Check if running in kitty terminal
 is_kitty() {
-    [[ -n "${KITTY_WINDOW_ID:-}" ]]
+  [[ -n "${KITTY_WINDOW_ID:-}" ]]
 }
 
 # Get repository name from a worktree path
 get_repo_name() {
-    local path="$1"
-    local git_root parent_dir
+  local path="$1"
+  local git_root parent_dir
 
-    # Get git root from the path
-    git_root="$(git -C "$path" rev-parse --show-toplevel 2>/dev/null)" || git_root="$path"
-    parent_dir="$(dirname "$git_root")"
+  # Get git root from the path
+  git_root="$(git -C "$path" rev-parse --show-toplevel 2>/dev/null)" || git_root="$path"
+  parent_dir="$(dirname "$git_root")"
 
-    # If inside worktrees folder, find the main worktree name
-    if [[ "$(basename "$parent_dir")" == "worktrees" ]]; then
-        # The main repo should be a sibling of the worktrees folder
-        # or we can get it from git worktree list (first entry is usually main)
-        local main_path
-        main_path="$(git -C "$path" worktree list 2>/dev/null | head -1 | awk '{print $1}')"
-        if [[ -n "$main_path" ]]; then
-            basename "$main_path"
-        else
-            # Fallback: parent of worktrees folder might have the repo
-            basename "$(dirname "$parent_dir")"
-        fi
+  # If inside worktrees folder, find the main worktree name
+  if [[ "$(basename "$parent_dir")" == "worktrees" ]]; then
+    # The main repo should be a sibling of the worktrees folder
+    # or we can get it from git worktree list (first entry is usually main)
+    local main_path
+    main_path="$(git -C "$path" worktree list 2>/dev/null | head -1 | awk '{print $1}')"
+    if [[ -n "$main_path" ]]; then
+      basename "$main_path"
     else
-        basename "$git_root"
+      # Fallback: parent of worktrees folder might have the repo
+      basename "$(dirname "$parent_dir")"
     fi
+  else
+    basename "$git_root"
+  fi
 }
 
 # Open new kitty OS window with title and optional command
 kitty_open_window() {
-    local title="$1"
-    local cwd="$2"
-    shift 2
-    local cmd=("$@")
+  local title="$1"
+  local cwd="$2"
+  shift 2
+  local cmd=("$@")
 
-    if [[ ${#cmd[@]} -eq 0 ]]; then
-        # Just open shell in directory
-        kitty @ launch --type=os-window --os-window-title="$title" --cwd="$cwd" >&2
-    else
-        # Run command in new window
-        kitty @ launch --type=os-window --os-window-title="$title" --cwd="$cwd" "${cmd[@]}" >&2
-    fi
+  if [[ ${#cmd[@]} -eq 0 ]]; then
+    ( setsid kitty --title "$title" --directory "$cwd" &>/dev/null & )
+  else
+    ( setsid kitty --title "$title" --directory "$cwd" "${cmd[@]}" &>/dev/null & )
+  fi
+  sleep 0.1
 }
 
 # Get git repo root or return error
 get_repo_root() {
-    git rev-parse --show-toplevel 2>/dev/null || {
-        error "Not inside a git repository"
-        return 1
-    }
+  git rev-parse --show-toplevel 2>/dev/null || {
+    error "Not inside a git repository"
+    return 1
+  }
 }
 
 # Get worktrees base directory
 get_worktrees_dir() {
-    local repo_root="$1"
-    local parent_dir
-    parent_dir="$(dirname "$repo_root")"
+  local repo_root="$1"
+  local parent_dir
+  parent_dir="$(dirname "$repo_root")"
 
-    # Check if we're already inside a worktrees folder
-    if [[ "$(basename "$parent_dir")" == "worktrees" ]]; then
-        echo "$parent_dir"
-    else
-        echo "$parent_dir/worktrees"
-    fi
+  # Check if we're already inside a worktrees folder
+  if [[ "$(basename "$parent_dir")" == "worktrees" ]]; then
+    echo "$parent_dir"
+  else
+    echo "$parent_dir/worktrees"
+  fi
 }
 
 # Extract short branch name (part after last /)
 get_short_branch_name() {
-    local branch="$1"
-    echo "${branch##*/}"
+  local branch="$1"
+  echo "${branch##*/}"
 }
 
 # Get list of branches for completion (local first, then remote without duplicates)
 get_branches() {
-    local branches=()
-    local local_branches
-    local remote_branches
+  local branches=()
+  local local_branches
+  local remote_branches
 
-    # Get local branches
-    local_branches=$(git branch --format='%(refname:short)' 2>/dev/null)
+  # Get local branches
+  local_branches=$(git branch --format='%(refname:short)' 2>/dev/null)
 
-    # Get remote branches, excluding those that have local counterparts
-    remote_branches=$(git branch -r --format='%(refname:short)' 2>/dev/null | sed 's|^[^/]*/||' | sort -u)
+  # Get remote branches, excluding those that have local counterparts
+  remote_branches=$(git branch -r --format='%(refname:short)' 2>/dev/null | sed 's|^[^/]*/||' | sort -u)
 
-    # Add local branches first
-    while IFS= read -r branch; do
-        [[ -n "$branch" ]] && branches+=("$branch")
-    done <<< "$local_branches"
+  # Add local branches first
+  while IFS= read -r branch; do
+    [[ -n "$branch" ]] && branches+=("$branch")
+  done <<<"$local_branches"
 
-    # Add remote branches that don't exist locally
-    while IFS= read -r branch; do
-        if [[ -n "$branch" ]] && ! printf '%s\n' "${branches[@]}" | grep -qx "$branch"; then
-            branches+=("$branch")
-        fi
-    done <<< "$remote_branches"
+  # Add remote branches that don't exist locally
+  while IFS= read -r branch; do
+    if [[ -n "$branch" ]] && ! printf '%s\n' "${branches[@]}" | grep -qx "$branch"; then
+      branches+=("$branch")
+    fi
+  done <<<"$remote_branches"
 
+  # Filter out branches already checked out in worktrees
+  local worktree_branches
+  worktree_branches=$(git worktree list --porcelain 2>/dev/null | grep '^branch ' | sed 's|^branch refs/heads/||')
+  if [[ -n "$worktree_branches" ]]; then
+    printf '%s\n' "${branches[@]}" | grep -vxF "$worktree_branches"
+  else
     printf '%s\n' "${branches[@]}"
+  fi
 }
 
 # Get list of worktrees for completion (excludes main worktree)
 get_worktrees() {
-    git worktree list --porcelain 2>/dev/null | grep '^worktree ' | sed 's|^worktree ||' | while read -r path; do
-        # Only include worktrees inside a "worktrees" folder
-        local parent_name
-        parent_name="$(basename "$(dirname "$path")")"
-        if [[ "$parent_name" == "worktrees" ]]; then
-            basename "$path"
-        fi
-    done
+  git worktree list --porcelain 2>/dev/null | grep '^worktree ' | sed 's|^worktree ||' | while read -r path; do
+    # Only include worktrees inside a "worktrees" folder
+    local parent_name
+    parent_name="$(basename "$(dirname "$path")")"
+    if [[ "$parent_name" == "worktrees" ]]; then
+      basename "$path"
+    fi
+  done
 }
 
 # Check if branch is already checked out in a worktree
 find_branch_worktree() {
-    local branch="$1"
-    git worktree list --porcelain 2>/dev/null | awk -v branch="$branch" '
+  local branch="$1"
+  git worktree list --porcelain 2>/dev/null | awk -v branch="$branch" '
         /^worktree / { path = substr($0, 10) }
         /^branch / { if (substr($0, 8) == "refs/heads/" branch) print path }
     '
@@ -149,387 +155,387 @@ find_branch_worktree() {
 
 # Command: create [BRANCH_NAME] [-o COMMAND] [-p PATH]
 cmd_create() {
-    local branch_name=""
-    local command="${EDITOR:-vim}"
-    local path_arg="."
-    local repo_root worktrees_dir short_name worktree_path existing_worktree
+  local branch_name=""
+  local command="${EDITOR:-vim}"
+  local path_arg="."
+  local repo_root worktrees_dir short_name worktree_path existing_worktree
 
-    # Parse arguments
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            -o)
-                command="$2"
-                shift 2
-                ;;
-            -p)
-                path_arg="$2"
-                shift 2
-                ;;
-            *)
-                if [[ -z "$branch_name" ]]; then
-                    branch_name="$1"
-                fi
-                shift
-                ;;
-        esac
-    done
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -o)
+      command="$2"
+      shift 2
+      ;;
+    -p)
+      path_arg="$2"
+      shift 2
+      ;;
+    *)
+      if [[ -z "$branch_name" ]]; then
+        branch_name="$1"
+      fi
+      shift
+      ;;
+    esac
+  done
 
-    # Step 1: Check if in git repo and get root
-    repo_root="$(get_repo_root)" || return 1
+  # Step 1: Check if in git repo and get root
+  repo_root="$(get_repo_root)" || return 1
 
-    # Step 2: Determine branch name (use current if not provided)
-    if [[ -z "$branch_name" ]]; then
-        branch_name="$(git rev-parse --abbrev-ref HEAD)"
+  # Step 2: Determine branch name (use current if not provided)
+  if [[ -z "$branch_name" ]]; then
+    branch_name="$(git rev-parse --abbrev-ref HEAD)"
+  fi
+
+  # Step 3: Check if branch is already checked out somewhere
+  existing_worktree="$(find_branch_worktree "$branch_name")"
+  if [[ -n "$existing_worktree" ]]; then
+    warn "Branch '$branch_name' already checked out at: $existing_worktree"
+    worktree_path="$existing_worktree"
+  else
+    # Step 4: Get/create worktrees directory
+    worktrees_dir="$(get_worktrees_dir "$repo_root")"
+    if [[ ! -d "$worktrees_dir" ]]; then
+      mkdir -p "$worktrees_dir"
+      success "Created worktrees directory: $worktrees_dir"
     fi
 
-    # Step 3: Check if branch is already checked out somewhere
-    existing_worktree="$(find_branch_worktree "$branch_name")"
-    if [[ -n "$existing_worktree" ]]; then
-        warn "Branch '$branch_name' already checked out at: $existing_worktree"
-        worktree_path="$existing_worktree"
-    else
-        # Step 4: Get/create worktrees directory
-        worktrees_dir="$(get_worktrees_dir "$repo_root")"
-        if [[ ! -d "$worktrees_dir" ]]; then
-            mkdir -p "$worktrees_dir"
-            success "Created worktrees directory: $worktrees_dir"
-        fi
-
-        # Step 5: Determine worktree folder name and path
-        short_name="$(get_short_branch_name "$branch_name")"
-        worktree_path="$worktrees_dir/$short_name"
-
-        # Step 6: Create or checkout worktree
-        if [[ -d "$worktree_path" ]]; then
-            # Folder exists, check if it's already a worktree
-            if git worktree list | grep -q "$worktree_path"; then
-                warn "Worktree already exists at $worktree_path"
-                # Checkout the branch in existing worktree
-                git -C "$worktree_path" checkout "$branch_name" 2>/dev/null || true
-            else
-                error "Directory exists but is not a worktree: $worktree_path"
-                return 1
-            fi
-        else
-            # Create new worktree
-            # Check if branch exists locally
-            if git show-ref --verify --quiet "refs/heads/$branch_name"; then
-                git worktree add "$worktree_path" "$branch_name" >&2
-            # Check if branch exists on remote
-            elif git show-ref --verify --quiet "refs/remotes/origin/$branch_name"; then
-                git worktree add "$worktree_path" "$branch_name" >&2
-            else
-                # Create new branch
-                git worktree add -b "$branch_name" "$worktree_path" >&2
-            fi
-            success "Created worktree for '$branch_name' at $worktree_path"
-        fi
-    fi
-
-    # Step 7: Open worktree with command
+    # Step 5: Determine worktree folder name and path
     short_name="$(get_short_branch_name "$branch_name")"
-    local target_path cmd_arg cwd
+    worktree_path="$worktrees_dir/$short_name"
 
-    if [[ "$path_arg" == "." ]]; then
-        target_path="$worktree_path"
+    # Step 6: Create or checkout worktree
+    if [[ -d "$worktree_path" ]]; then
+      # Folder exists, check if it's already a worktree
+      if git worktree list | grep -q "$worktree_path"; then
+        warn "Worktree already exists at $worktree_path"
+        # Checkout the branch in existing worktree
+        git -C "$worktree_path" checkout "$branch_name" 2>/dev/null || true
+      else
+        error "Directory exists but is not a worktree: $worktree_path"
+        return 1
+      fi
     else
-        target_path="$worktree_path/$path_arg"
+      # Create new worktree
+      # Check if branch exists locally
+      if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+        git worktree add "$worktree_path" "$branch_name" >&2
+      # Check if branch exists on remote
+      elif git show-ref --verify --quiet "refs/remotes/origin/$branch_name"; then
+        git worktree add "$worktree_path" "$branch_name" >&2
+      else
+        # Create new branch
+        git worktree add -b "$branch_name" "$worktree_path" >&2
+      fi
+      success "Created worktree for '$branch_name' at $worktree_path"
     fi
+  fi
 
-    if [[ -d "$target_path" ]]; then
-        cwd="$target_path"
-        cmd_arg="."
-    else
-        cwd="$worktree_path"
-        cmd_arg="$path_arg"
-    fi
+  # Step 7: Open worktree with command
+  short_name="$(get_short_branch_name "$branch_name")"
+  local target_path cmd_arg cwd
 
-    # Kitty: open in new OS window
-    if is_kitty; then
-        local repo_name window_title
-        repo_name="$(get_repo_name "$repo_root")"
-        window_title="$repo_name: $short_name"
-        kitty_open_window "$window_title" "$cwd" "$command" "$cmd_arg"
-        success "Opened worktree in new kitty window: $window_title"
-        return 0
-    fi
+  if [[ "$path_arg" == "." ]]; then
+    target_path="$worktree_path"
+  else
+    target_path="$worktree_path/$path_arg"
+  fi
 
-    # Default: output command for shell to eval
-    echo "cd '$cwd' && $command '$cmd_arg'"
+  if [[ -d "$target_path" ]]; then
+    cwd="$target_path"
+    cmd_arg="."
+  else
+    cwd="$worktree_path"
+    cmd_arg="$path_arg"
+  fi
+
+  # Kitty: open in new OS window
+  if is_kitty; then
+    local repo_name window_title
+    repo_name="$(get_repo_name "$repo_root")"
+    window_title="$repo_name: $short_name"
+    kitty_open_window "$window_title" "$cwd" "$command" "$cmd_arg"
+    success "Opened worktree in new kitty window: $window_title"
+    return 0
+  fi
+
+  # Default: output command for shell to eval
+  echo "cd '$cwd' && $command '$cmd_arg'"
 }
 
 # Command: open [WORKTREE_NAME] [-o COMMAND] [-p PATH]
 cmd_open() {
-    local worktree_name=""
-    local command="${EDITOR:-vim}"
-    local path_arg="."
-    local worktrees_dir worktree_path target_path repo_name window_title
+  local worktree_name=""
+  local command="${EDITOR:-vim}"
+  local path_arg="."
+  local worktrees_dir worktree_path target_path repo_name window_title
 
-    # Parse arguments
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            -o)
-                command="$2"
-                shift 2
-                ;;
-            -p)
-                path_arg="$2"
-                shift 2
-                ;;
-            *)
-                if [[ -z "$worktree_name" ]]; then
-                    worktree_name="$1"
-                fi
-                shift
-                ;;
-        esac
-    done
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -o)
+      command="$2"
+      shift 2
+      ;;
+    -p)
+      path_arg="$2"
+      shift 2
+      ;;
+    *)
+      if [[ -z "$worktree_name" ]]; then
+        worktree_name="$1"
+      fi
+      shift
+      ;;
+    esac
+  done
 
-    if [[ -z "$worktree_name" ]]; then
-        error "Worktree name required"
-        return 1
+  if [[ -z "$worktree_name" ]]; then
+    error "Worktree name required"
+    return 1
+  fi
+
+  # Find worktree path
+  worktree_path=$(git worktree list --porcelain 2>/dev/null | grep '^worktree ' | sed 's|^worktree ||' | while read -r p; do
+    if [[ "$(basename "$p")" == "$worktree_name" ]]; then
+      echo "$p"
+      break
     fi
+  done)
 
-    # Find worktree path
-    worktree_path=$(git worktree list --porcelain 2>/dev/null | grep '^worktree ' | sed 's|^worktree ||' | while read -r p; do
-        if [[ "$(basename "$p")" == "$worktree_name" ]]; then
-            echo "$p"
-            break
-        fi
-    done)
+  if [[ -z "$worktree_path" ]]; then
+    error "Worktree '$worktree_name' not found"
+    return 1
+  fi
 
-    if [[ -z "$worktree_path" ]]; then
-        error "Worktree '$worktree_name' not found"
-        return 1
-    fi
+  # Determine target path and command argument
+  local cmd_arg cwd
 
-    # Determine target path and command argument
-    local cmd_arg cwd
+  if [[ "$path_arg" == "." ]]; then
+    target_path="$worktree_path"
+  else
+    target_path="$worktree_path/$path_arg"
+  fi
 
-    if [[ "$path_arg" == "." ]]; then
-        target_path="$worktree_path"
-    else
-        target_path="$worktree_path/$path_arg"
-    fi
+  if [[ -d "$target_path" ]]; then
+    # It's a directory - cd there and use "." as argument
+    cwd="$target_path"
+    cmd_arg="."
+  else
+    # It's a file (existing or new) - cd to worktree and use path as argument
+    cwd="$worktree_path"
+    cmd_arg="$path_arg"
+  fi
 
-    if [[ -d "$target_path" ]]; then
-        # It's a directory - cd there and use "." as argument
-        cwd="$target_path"
-        cmd_arg="."
-    else
-        # It's a file (existing or new) - cd to worktree and use path as argument
-        cwd="$worktree_path"
-        cmd_arg="$path_arg"
-    fi
+  # Kitty: open in new OS window
+  if is_kitty; then
+    repo_name="$(get_repo_name "$worktree_path")"
+    window_title="$repo_name: $worktree_name"
+    kitty_open_window "$window_title" "$cwd" "$command" "$cmd_arg"
+    success "Opened '$worktree_name' in new kitty window: $window_title"
+    return 0
+  fi
 
-    # Kitty: open in new OS window
-    if is_kitty; then
-        repo_name="$(get_repo_name "$worktree_path")"
-        window_title="$repo_name: $worktree_name"
-        kitty_open_window "$window_title" "$cwd" "$command" "$cmd_arg"
-        success "Opened '$worktree_name' in new kitty window: $window_title"
-        return 0
-    fi
-
-    # Default: output command for shell to eval
-    echo "cd '$cwd' && $command '$cmd_arg'"
+  # Default: output command for shell to eval
+  echo "cd '$cwd' && $command '$cmd_arg'"
 }
 
 # Find worktree path by name
 find_worktree_path() {
-    local worktree_name="$1"
-    git worktree list --porcelain 2>/dev/null | grep '^worktree ' | sed 's|^worktree ||' | while read -r p; do
-        if [[ "$(basename "$p")" == "$worktree_name" ]]; then
-            echo "$p"
-            break
-        fi
-    done
+  local worktree_name="$1"
+  git worktree list --porcelain 2>/dev/null | grep '^worktree ' | sed 's|^worktree ||' | while read -r p; do
+    if [[ "$(basename "$p")" == "$worktree_name" ]]; then
+      echo "$p"
+      break
+    fi
+  done
 }
 
 # Get branch name for a worktree
 get_worktree_branch() {
-    local worktree_path="$1"
-    git -C "$worktree_path" rev-parse --abbrev-ref HEAD 2>/dev/null
+  local worktree_path="$1"
+  git -C "$worktree_path" rev-parse --abbrev-ref HEAD 2>/dev/null
 }
 
 # Get main worktree path (original repo, not in worktrees folder)
 get_main_worktree() {
-    git worktree list --porcelain 2>/dev/null | grep '^worktree ' | sed 's|^worktree ||' | while read -r p; do
-        local parent_name
-        parent_name="$(basename "$(dirname "$p")")"
-        if [[ "$parent_name" != "worktrees" ]]; then
-            echo "$p"
-            break
-        fi
-    done
+  git worktree list --porcelain 2>/dev/null | grep '^worktree ' | sed 's|^worktree ||' | while read -r p; do
+    local parent_name
+    parent_name="$(basename "$(dirname "$p")")"
+    if [[ "$parent_name" != "worktrees" ]]; then
+      echo "$p"
+      break
+    fi
+  done
 }
 
 # Command: delete [WORKTREE_NAME]
 cmd_delete() {
-    local worktree_name="${1:-}"
-    local worktree_path
+  local worktree_name="${1:-}"
+  local worktree_path
 
-    if [[ -z "$worktree_name" ]]; then
-        error "Worktree name required"
-        return 1
+  if [[ -z "$worktree_name" ]]; then
+    error "Worktree name required"
+    return 1
+  fi
+
+  # Find worktree path
+  worktree_path="$(find_worktree_path "$worktree_name")"
+
+  if [[ -z "$worktree_path" ]]; then
+    error "Worktree '$worktree_name' not found"
+    return 1
+  fi
+
+  # Check for uncommitted changes
+  local changes
+  changes="$(git -C "$worktree_path" status --porcelain 2>/dev/null)"
+
+  if [[ -n "$changes" ]]; then
+    warn "Worktree '$worktree_name' has uncommitted changes:"
+    echo "$changes" | head -10 >&2
+    [[ $(echo "$changes" | wc -l) -gt 10 ]] && echo "  ..." >&2
+
+    # Ask for confirmation
+    echo -n "Delete anyway? [y/N] " >&2
+    read -r confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+      echo "Cancelled" >&2
+      return 1
     fi
+  fi
 
-    # Find worktree path
-    worktree_path="$(find_worktree_path "$worktree_name")"
+  # Get branch name before deletion
+  local branch_name
+  branch_name="$(get_worktree_branch "$worktree_path")"
 
-    if [[ -z "$worktree_path" ]]; then
-        error "Worktree '$worktree_name' not found"
-        return 1
+  # Delete worktree
+  git worktree remove --force "$worktree_path" >&2 || {
+    error "Failed to remove worktree"
+    return 1
+  }
+
+  success "Deleted worktree '$worktree_name'"
+
+  # Optionally delete the branch if it was created for this worktree
+  if [[ -n "$branch_name" && "$branch_name" != "HEAD" ]]; then
+    echo -n "Also delete branch '$branch_name'? [y/N] " >&2
+    read -r confirm
+    if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+      git branch -D "$branch_name" >&2 && success "Deleted branch '$branch_name'"
     fi
-
-    # Check for uncommitted changes
-    local changes
-    changes="$(git -C "$worktree_path" status --porcelain 2>/dev/null)"
-
-    if [[ -n "$changes" ]]; then
-        warn "Worktree '$worktree_name' has uncommitted changes:"
-        echo "$changes" | head -10 >&2
-        [[ $(echo "$changes" | wc -l) -gt 10 ]] && echo "  ..." >&2
-
-        # Ask for confirmation
-        echo -n "Delete anyway? [y/N] " >&2
-        read -r confirm
-        if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-            echo "Cancelled" >&2
-            return 1
-        fi
-    fi
-
-    # Get branch name before deletion
-    local branch_name
-    branch_name="$(get_worktree_branch "$worktree_path")"
-
-    # Delete worktree
-    git worktree remove --force "$worktree_path" >&2 || {
-        error "Failed to remove worktree"
-        return 1
-    }
-
-    success "Deleted worktree '$worktree_name'"
-
-    # Optionally delete the branch if it was created for this worktree
-    if [[ -n "$branch_name" && "$branch_name" != "HEAD" ]]; then
-        echo -n "Also delete branch '$branch_name'? [y/N] " >&2
-        read -r confirm
-        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-            git branch -D "$branch_name" >&2 && success "Deleted branch '$branch_name'"
-        fi
-    fi
+  fi
 }
 
 # Command: checkout [WORKTREE_NAME]
 cmd_checkout() {
-    local worktree_name="${1:-}"
-    local worktree_path branch_name main_worktree
+  local worktree_name="${1:-}"
+  local worktree_path branch_name main_worktree
 
-    if [[ -z "$worktree_name" ]]; then
-        error "Worktree name required"
-        return 1
+  if [[ -z "$worktree_name" ]]; then
+    error "Worktree name required"
+    return 1
+  fi
+
+  # Find worktree path
+  worktree_path="$(find_worktree_path "$worktree_name")"
+
+  if [[ -z "$worktree_path" ]]; then
+    error "Worktree '$worktree_name' not found"
+    return 1
+  fi
+
+  # Get branch name
+  branch_name="$(get_worktree_branch "$worktree_path")"
+  if [[ -z "$branch_name" || "$branch_name" == "HEAD" ]]; then
+    error "Could not determine branch for worktree '$worktree_name'"
+    return 1
+  fi
+
+  # Get main worktree
+  main_worktree="$(get_main_worktree)"
+  if [[ -z "$main_worktree" ]]; then
+    error "Could not find main worktree"
+    return 1
+  fi
+
+  # Check for uncommitted changes in worktree
+  local changes
+  changes="$(git -C "$worktree_path" status --porcelain 2>/dev/null)"
+
+  if [[ -n "$changes" ]]; then
+    warn "Worktree '$worktree_name' has uncommitted changes:"
+    echo "$changes" | head -10 >&2
+    [[ $(echo "$changes" | wc -l) -gt 10 ]] && echo "  ..." >&2
+
+    echo -n "Delete worktree and checkout branch in main repo anyway? [y/N] " >&2
+    read -r confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+      echo "Cancelled" >&2
+      return 1
     fi
+  fi
 
-    # Find worktree path
-    worktree_path="$(find_worktree_path "$worktree_name")"
+  # Delete worktree
+  git worktree remove --force "$worktree_path" >&2 || {
+    error "Failed to remove worktree"
+    return 1
+  }
+  success "Deleted worktree '$worktree_name'"
 
-    if [[ -z "$worktree_path" ]]; then
-        error "Worktree '$worktree_name' not found"
-        return 1
-    fi
+  # Checkout branch in main worktree
+  git -C "$main_worktree" checkout "$branch_name" >&2 || {
+    error "Failed to checkout branch '$branch_name' in main worktree"
+    return 1
+  }
+  success "Checked out '$branch_name' in main worktree"
 
-    # Get branch name
-    branch_name="$(get_worktree_branch "$worktree_path")"
-    if [[ -z "$branch_name" || "$branch_name" == "HEAD" ]]; then
-        error "Could not determine branch for worktree '$worktree_name'"
-        return 1
-    fi
-
-    # Get main worktree
-    main_worktree="$(get_main_worktree)"
-    if [[ -z "$main_worktree" ]]; then
-        error "Could not find main worktree"
-        return 1
-    fi
-
-    # Check for uncommitted changes in worktree
-    local changes
-    changes="$(git -C "$worktree_path" status --porcelain 2>/dev/null)"
-
-    if [[ -n "$changes" ]]; then
-        warn "Worktree '$worktree_name' has uncommitted changes:"
-        echo "$changes" | head -10 >&2
-        [[ $(echo "$changes" | wc -l) -gt 10 ]] && echo "  ..." >&2
-
-        echo -n "Delete worktree and checkout branch in main repo anyway? [y/N] " >&2
-        read -r confirm
-        if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-            echo "Cancelled" >&2
-            return 1
-        fi
-    fi
-
-    # Delete worktree
-    git worktree remove --force "$worktree_path" >&2 || {
-        error "Failed to remove worktree"
-        return 1
-    }
-    success "Deleted worktree '$worktree_name'"
-
-    # Checkout branch in main worktree
-    git -C "$main_worktree" checkout "$branch_name" >&2 || {
-        error "Failed to checkout branch '$branch_name' in main worktree"
-        return 1
-    }
-    success "Checked out '$branch_name' in main worktree"
-
-    # Output cd command to main worktree
-    echo "cd '$main_worktree'"
+  # Output cd command to main worktree
+  echo "cd '$main_worktree'"
 }
 
 # Generate completions
 generate_completions() {
-    local cmd="$1"
+  local cmd="$1"
 
-    case "$cmd" in
-        create)
-            get_branches
-            ;;
-        open|delete|checkout|*)
-            get_worktrees
-            ;;
-    esac
+  case "$cmd" in
+  create)
+    get_branches
+    ;;
+  open | delete | checkout | *)
+    get_worktrees
+    ;;
+  esac
 }
 
 # Main entry point
 main() {
-    local cmd="${1:-}"
+  local cmd="${1:-}"
 
-    case "$cmd" in
-        create)
-            shift
-            cmd_create "$@"
-            ;;
-        open)
-            shift
-            cmd_open "$@"
-            ;;
-        delete)
-            shift
-            cmd_delete "$@"
-            ;;
-        checkout)
-            shift
-            cmd_checkout "$@"
-            ;;
-        --complete)
-            shift
-            generate_completions "$@"
-            ;;
-        --help|-h|"")
-            cat <<EOF
+  case "$cmd" in
+  create)
+    shift
+    cmd_create "$@"
+    ;;
+  open)
+    shift
+    cmd_open "$@"
+    ;;
+  delete)
+    shift
+    cmd_delete "$@"
+    ;;
+  checkout)
+    shift
+    cmd_checkout "$@"
+    ;;
+  --complete)
+    shift
+    generate_completions "$@"
+    ;;
+  --help | -h | "")
+    cat <<EOF
 Worktree CLI - Git worktree management tool
 
 Usage:
@@ -557,15 +563,15 @@ Kitty Integration:
     When running in kitty terminal, creates/opens worktrees in a new
     OS window with title "{repo}: {worktree}".
 EOF
-            ;;
-        *)
-            # Treat as shortcut: worktree [COMMAND] [NAME] [-p PATH]
-            # becomes: worktree open [NAME] -o [COMMAND] [-p PATH]
-            local shortcut_cmd="$cmd"
-            shift
-            cmd_open "$@" -o "$shortcut_cmd"
-            ;;
-    esac
+    ;;
+  *)
+    # Treat as shortcut: worktree [COMMAND] [NAME] [-p PATH]
+    # becomes: worktree open [NAME] -o [COMMAND] [-p PATH]
+    local shortcut_cmd="$cmd"
+    shift
+    cmd_open "$@" -o "$shortcut_cmd"
+    ;;
+  esac
 }
 
 main "$@"
