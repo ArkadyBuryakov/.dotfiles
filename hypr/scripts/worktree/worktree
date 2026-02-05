@@ -24,6 +24,53 @@ warn() {
     echo -e "${YELLOW}$1${NC}" >&2
 }
 
+# Check if running in kitty terminal
+is_kitty() {
+    [[ -n "${KITTY_WINDOW_ID:-}" ]]
+}
+
+# Get repository name from a worktree path
+get_repo_name() {
+    local path="$1"
+    local git_root parent_dir
+
+    # Get git root from the path
+    git_root="$(git -C "$path" rev-parse --show-toplevel 2>/dev/null)" || git_root="$path"
+    parent_dir="$(dirname "$git_root")"
+
+    # If inside worktrees folder, find the main worktree name
+    if [[ "$(basename "$parent_dir")" == "worktrees" ]]; then
+        # The main repo should be a sibling of the worktrees folder
+        # or we can get it from git worktree list (first entry is usually main)
+        local main_path
+        main_path="$(git -C "$path" worktree list 2>/dev/null | head -1 | awk '{print $1}')"
+        if [[ -n "$main_path" ]]; then
+            basename "$main_path"
+        else
+            # Fallback: parent of worktrees folder might have the repo
+            basename "$(dirname "$parent_dir")"
+        fi
+    else
+        basename "$git_root"
+    fi
+}
+
+# Open new kitty OS window with title and optional command
+kitty_open_window() {
+    local title="$1"
+    local cwd="$2"
+    shift 2
+    local cmd=("$@")
+
+    if [[ ${#cmd[@]} -eq 0 ]]; then
+        # Just open shell in directory
+        kitty @ launch --type=os-window --os-window-title="$title" --cwd="$cwd" >&2
+    else
+        # Run command in new window
+        kitty @ launch --type=os-window --os-window-title="$title" --cwd="$cwd" "${cmd[@]}" >&2
+    fi
+}
+
 # Get git repo root or return error
 get_repo_root() {
     git rev-parse --show-toplevel 2>/dev/null || {
@@ -98,7 +145,7 @@ find_branch_worktree() {
 # Command: create [BRANCH_NAME]
 cmd_create() {
     local branch_name="${1:-}"
-    local repo_root worktrees_dir short_name worktree_path existing_worktree
+    local repo_root worktrees_dir short_name worktree_path existing_worktree repo_name window_title
 
     # Step 1: Check if in git repo and get root
     repo_root="$(get_repo_root)" || return 1
@@ -112,6 +159,17 @@ cmd_create() {
     existing_worktree="$(find_branch_worktree "$branch_name")"
     if [[ -n "$existing_worktree" ]]; then
         warn "Branch '$branch_name' already checked out at: $existing_worktree"
+        short_name="$(get_short_branch_name "$branch_name")"
+
+        # Kitty: open in new OS window
+        if is_kitty; then
+            repo_name="$(get_repo_name "$repo_root")"
+            window_title="$repo_name: $short_name"
+            kitty_open_window "$window_title" "$existing_worktree"
+            success "Opened worktree in new kitty window: $window_title"
+            return 0
+        fi
+
         echo "cd '$existing_worktree'"
         return 0
     fi
@@ -153,7 +211,17 @@ cmd_create() {
         success "Created worktree for '$branch_name' at $worktree_path"
     fi
 
-    # Step 7: Output cd command for shell to eval
+    # Step 7: Open worktree
+    # Kitty: open in new OS window
+    if is_kitty; then
+        repo_name="$(get_repo_name "$repo_root")"
+        window_title="$repo_name: $short_name"
+        kitty_open_window "$window_title" "$worktree_path"
+        success "Opened worktree in new kitty window: $window_title"
+        return 0
+    fi
+
+    # Default: output cd command for shell to eval
     echo "cd '$worktree_path'"
 }
 
@@ -162,7 +230,7 @@ cmd_open() {
     local worktree_name=""
     local command="${EDITOR:-vim}"
     local path_arg="."
-    local worktrees_dir worktree_path target_path
+    local worktrees_dir worktree_path target_path repo_name window_title
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -202,19 +270,31 @@ cmd_open() {
         return 1
     fi
 
-    # Determine target path
+    # Determine target path and command argument
     target_path="$worktree_path/$path_arg"
+    local cmd_arg cwd
 
     if [[ -d "$target_path" ]]; then
         # It's a directory - cd there and use "." as argument
-        echo "cd '$target_path' && $command ."
-    elif [[ -f "$target_path" ]]; then
-        # It's a file - cd to worktree and use path as argument
-        echo "cd '$worktree_path' && $command '$path_arg'"
+        cwd="$target_path"
+        cmd_arg="."
     else
-        # Path doesn't exist yet, treat as file
-        echo "cd '$worktree_path' && $command '$path_arg'"
+        # It's a file (existing or new) - cd to worktree and use path as argument
+        cwd="$worktree_path"
+        cmd_arg="$path_arg"
     fi
+
+    # Kitty: open in new OS window
+    if is_kitty; then
+        repo_name="$(get_repo_name "$worktree_path")"
+        window_title="$repo_name: $worktree_name"
+        kitty_open_window "$window_title" "$cwd" "$command" "$cmd_arg"
+        success "Opened '$worktree_name' in new kitty window: $window_title"
+        return 0
+    fi
+
+    # Default: output command for shell to eval
+    echo "cd '$cwd' && $command '$cmd_arg'"
 }
 
 # Generate completions
@@ -268,6 +348,10 @@ Examples:
     eval "\$(worktree code feature)"
 
 Note: Use with 'eval' to change directory in current shell.
+
+Kitty Integration:
+    When running in kitty terminal, creates/opens worktrees in a new
+    OS window with title "{repo}: {worktree}".
 EOF
             ;;
         *)
