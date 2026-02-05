@@ -1,0 +1,283 @@
+#!/usr/bin/env bash
+
+# Worktree CLI - Git worktree management tool
+# Usage: source this script or use with eval "$(worktree ...)"
+
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+error() {
+    echo -e "${RED}Error:${NC} $1" >&2
+    return 1
+}
+
+success() {
+    echo -e "${GREEN}$1${NC}" >&2
+}
+
+warn() {
+    echo -e "${YELLOW}$1${NC}" >&2
+}
+
+# Get git repo root or return error
+get_repo_root() {
+    git rev-parse --show-toplevel 2>/dev/null || {
+        error "Not inside a git repository"
+        return 1
+    }
+}
+
+# Get worktrees base directory
+get_worktrees_dir() {
+    local repo_root="$1"
+    local parent_dir
+    parent_dir="$(dirname "$repo_root")"
+
+    # Check if we're already inside a worktrees folder
+    if [[ "$(basename "$parent_dir")" == "worktrees" ]]; then
+        echo "$parent_dir"
+    else
+        echo "$parent_dir/worktrees"
+    fi
+}
+
+# Extract short branch name (part after last /)
+get_short_branch_name() {
+    local branch="$1"
+    echo "${branch##*/}"
+}
+
+# Get list of branches for completion (local first, then remote without duplicates)
+get_branches() {
+    local branches=()
+    local local_branches
+    local remote_branches
+
+    # Get local branches
+    local_branches=$(git branch --format='%(refname:short)' 2>/dev/null)
+
+    # Get remote branches, excluding those that have local counterparts
+    remote_branches=$(git branch -r --format='%(refname:short)' 2>/dev/null | sed 's|^[^/]*/||' | sort -u)
+
+    # Add local branches first
+    while IFS= read -r branch; do
+        [[ -n "$branch" ]] && branches+=("$branch")
+    done <<< "$local_branches"
+
+    # Add remote branches that don't exist locally
+    while IFS= read -r branch; do
+        if [[ -n "$branch" ]] && ! printf '%s\n' "${branches[@]}" | grep -qx "$branch"; then
+            branches+=("$branch")
+        fi
+    done <<< "$remote_branches"
+
+    printf '%s\n' "${branches[@]}"
+}
+
+# Get list of worktrees for completion
+get_worktrees() {
+    git worktree list --porcelain 2>/dev/null | grep '^worktree ' | sed 's|^worktree ||' | while read -r path; do
+        basename "$path"
+    done
+}
+
+# Check if branch is already checked out in a worktree
+find_branch_worktree() {
+    local branch="$1"
+    git worktree list --porcelain 2>/dev/null | awk -v branch="$branch" '
+        /^worktree / { path = substr($0, 10) }
+        /^branch / { if (substr($0, 8) == "refs/heads/" branch) print path }
+    '
+}
+
+# Command: create [BRANCH_NAME]
+cmd_create() {
+    local branch_name="${1:-}"
+    local repo_root worktrees_dir short_name worktree_path existing_worktree
+
+    # Step 1: Check if in git repo and get root
+    repo_root="$(get_repo_root)" || return 1
+
+    # Step 2: Determine branch name
+    if [[ -z "$branch_name" ]]; then
+        branch_name="$(git rev-parse --abbrev-ref HEAD)"
+    fi
+
+    # Step 3: Check if branch is already checked out somewhere
+    existing_worktree="$(find_branch_worktree "$branch_name")"
+    if [[ -n "$existing_worktree" ]]; then
+        warn "Branch '$branch_name' already checked out at: $existing_worktree"
+        echo "cd '$existing_worktree'"
+        return 0
+    fi
+
+    # Step 4: Get/create worktrees directory
+    worktrees_dir="$(get_worktrees_dir "$repo_root")"
+    if [[ ! -d "$worktrees_dir" ]]; then
+        mkdir -p "$worktrees_dir"
+        success "Created worktrees directory: $worktrees_dir"
+    fi
+
+    # Step 5: Determine worktree folder name and path
+    short_name="$(get_short_branch_name "$branch_name")"
+    worktree_path="$worktrees_dir/$short_name"
+
+    # Step 6: Create or checkout worktree
+    if [[ -d "$worktree_path" ]]; then
+        # Folder exists, check if it's already a worktree
+        if git worktree list | grep -q "$worktree_path"; then
+            warn "Worktree already exists at $worktree_path"
+            # Checkout the branch in existing worktree
+            git -C "$worktree_path" checkout "$branch_name" 2>/dev/null || true
+        else
+            error "Directory exists but is not a worktree: $worktree_path"
+            return 1
+        fi
+    else
+        # Create new worktree
+        # Check if branch exists locally
+        if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+            git worktree add "$worktree_path" "$branch_name" >&2
+        # Check if branch exists on remote
+        elif git show-ref --verify --quiet "refs/remotes/origin/$branch_name"; then
+            git worktree add "$worktree_path" "$branch_name" >&2
+        else
+            # Create new branch
+            git worktree add -b "$branch_name" "$worktree_path" >&2
+        fi
+        success "Created worktree for '$branch_name' at $worktree_path"
+    fi
+
+    # Step 7: Output cd command for shell to eval
+    echo "cd '$worktree_path'"
+}
+
+# Command: open [WORKTREE_NAME] [-o COMMAND] [-p PATH]
+cmd_open() {
+    local worktree_name=""
+    local command="${EDITOR:-vim}"
+    local path_arg="."
+    local worktrees_dir worktree_path target_path
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -o)
+                command="$2"
+                shift 2
+                ;;
+            -p)
+                path_arg="$2"
+                shift 2
+                ;;
+            *)
+                if [[ -z "$worktree_name" ]]; then
+                    worktree_name="$1"
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$worktree_name" ]]; then
+        error "Worktree name required"
+        return 1
+    fi
+
+    # Find worktree path
+    worktree_path=$(git worktree list --porcelain 2>/dev/null | grep '^worktree ' | sed 's|^worktree ||' | while read -r p; do
+        if [[ "$(basename "$p")" == "$worktree_name" ]]; then
+            echo "$p"
+            break
+        fi
+    done)
+
+    if [[ -z "$worktree_path" ]]; then
+        error "Worktree '$worktree_name' not found"
+        return 1
+    fi
+
+    # Determine target path
+    target_path="$worktree_path/$path_arg"
+
+    if [[ -d "$target_path" ]]; then
+        # It's a directory - cd there and use "." as argument
+        echo "cd '$target_path' && $command ."
+    elif [[ -f "$target_path" ]]; then
+        # It's a file - cd to worktree and use path as argument
+        echo "cd '$worktree_path' && $command '$path_arg'"
+    else
+        # Path doesn't exist yet, treat as file
+        echo "cd '$worktree_path' && $command '$path_arg'"
+    fi
+}
+
+# Generate completions
+generate_completions() {
+    local cmd="$1"
+
+    case "$cmd" in
+        create)
+            get_branches
+            ;;
+        open|*)
+            get_worktrees
+            ;;
+    esac
+}
+
+# Main entry point
+main() {
+    local cmd="${1:-}"
+
+    case "$cmd" in
+        create)
+            shift
+            cmd_create "$@"
+            ;;
+        open)
+            shift
+            cmd_open "$@"
+            ;;
+        --complete)
+            shift
+            generate_completions "$@"
+            ;;
+        --help|-h|"")
+            cat <<EOF
+Worktree CLI - Git worktree management tool
+
+Usage:
+    worktree create [BRANCH_NAME]     Create/open worktree for branch
+    worktree open [NAME] [-o CMD] [-p PATH]  Open worktree with command
+    worktree [CMD] [NAME] [-p PATH]   Shortcut for: worktree open -o CMD
+
+Options:
+    -o COMMAND    Command to run (default: \$EDITOR or vim)
+    -p PATH       Relative path within worktree
+
+Examples:
+    eval "\$(worktree create feature/new-thing)"
+    eval "\$(worktree open main)"
+    eval "\$(worktree nvim main -p src/)"
+    eval "\$(worktree code feature)"
+
+Note: Use with 'eval' to change directory in current shell.
+EOF
+            ;;
+        *)
+            # Treat as shortcut: worktree [COMMAND] [NAME] [-p PATH]
+            # becomes: worktree open [NAME] -o [COMMAND] [-p PATH]
+            local shortcut_cmd="$cmd"
+            shift
+            cmd_open "$@" -o "$shortcut_cmd"
+            ;;
+    esac
+}
+
+main "$@"
