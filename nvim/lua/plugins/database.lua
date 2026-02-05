@@ -27,16 +27,15 @@ return {
 
       function FindCurrentSql()
         -- Get the current node
-        local ts_utils = require("nvim-treesitter.ts_utils")
-        local node = ts_utils.get_node_at_cursor()
+        local ts = vim.treesitter
+        local node = ts.get_node()
         if node == nil then
           error("No SQL statement found under cursor")
         end
 
-        local root = ts_utils.get_root_for_node(node)
         local parent = node:parent()
 
-        while parent ~= nil and parent ~= root do
+        while parent ~= nil and parent:type() ~= "program" do
           node = parent
           parent = node:parent()
         end
@@ -82,6 +81,7 @@ return {
   },
   { -- optional saghen/blink.cmp completion source
     "saghen/blink.cmp",
+    version = "1.*",
     opts = {
       sources = {
         -- add vim-dadbod-completion to your completion providers

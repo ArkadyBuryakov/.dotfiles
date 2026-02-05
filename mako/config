@@ -12,4 +12,23 @@ outer-margin=14,10
 padding=6,8,6,6
 border-size=2
 border-color=#6A7B92FF
+progress-color=#6A7B92FF
+sort=+time
+
+[mode=do-not-disturb]
+invisible=1
+
+[category=system]
+anchor=bottom-center
+text-alignment=center
+on-notify=exec if [[ -e ${XDG_RUNTIME_DIR}/custom-mako-state ]]; then makoctl dismiss -n $(cat ${XDG_RUNTIME_DIR}/custom-mako-state); else touch ${XDG_RUNTIME_DIR}/custom-mako-state; fi; echo "$id" > ${XDG_RUNTIME_DIR}/custom-mako-state
+default-timeout=1200
+invisible=0
+
+[anchor=bottom-center]
+max-visible=-1
+on-button-right=dismiss-all
+
+[hidden=1]
+invisible=1
 

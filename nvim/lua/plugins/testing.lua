@@ -6,7 +6,6 @@ return {
       adapters = {
         ["neotest-python"] = {
           runner = "pytest",
-          python = { "./venv/bin/python" },
         },
       },
     },

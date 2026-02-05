@@ -60,7 +60,7 @@
         "on-click": "kitty btop"
     },
     "clock": {
-        "tooltip": false,
+        "tooltip": true,
         "tooltip-format": "<small>{calendar}</small>",
         "format": "  {:%H:%M    %a, %d %b %Y}",
     },

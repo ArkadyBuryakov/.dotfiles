@@ -1,20 +1,5 @@
 return {
   {
-    "folke/neoconf.nvim",
-    cmd = "Neoconf",
-    opts = {},
-  },
-  {
-    "neovim/nvim-lspconfig",
-    dependencies = {
-      {
-        "folke/neoconf.nvim",
-        cmd = "Neoconf",
-        opts = {},
-      },
-    },
-  },
-  {
     "navarasu/onedark.nvim",
     opts = {
       style = "darker",
@@ -30,9 +15,40 @@ return {
     },
   },
   {
-    "neovim/nvim-lspconfig",
+    "neovim/nvim-lspconfig", -- TODO: Find out proper way to set config. Now it loads from nvim-lspconfig on start and from vim.lsp.config() on restart
     opts = {
       inlay_hints = { enabled = false },
+      servers = {
+        basedpyright = {
+          settings = {
+            basedpyright = {
+              analysis = {
+                typeCheckingMode = "basic",
+                diagnosticMode = "workspace",
+                diagnosticSeverityOverrides = {
+                  reportArgumentType = false,
+                  reportAssignmentType = false,
+                  reportAttributeAccessIssue = false,
+                  reportCallIssue = false,
+                  reportGeneralTypeIssues = false,
+                  reportIndexIssue = "warning",
+                  reportMissingImports = true,
+                  reportOptionalMemberAccess = false,
+                  reportOptionalOperand = "information",
+                  reportOptionalSubscript = false,
+                  reportReturnType = "information",
+                  reportUnusedCallResult = false,
+                  reportUnusedCouroutine = false,
+                  strictDictionaryInference = false,
+                  strictListInference = false,
+                  strictParameterNoneValue = false,
+                  strictSetInference = false,
+                },
+              },
+            },
+          },
+        },
+      },
     },
   },
 }

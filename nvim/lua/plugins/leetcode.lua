@@ -13,6 +13,7 @@ return {
   },
   opts = {
     -- configuration goes here
-    lang = "golang",
+    -- lang = "golang",
+    lang = "python",
   },
 }

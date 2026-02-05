@@ -1,11 +1,10 @@
 {
   "extras": [
-    "lazyvim.plugins.extras.ai.copilot",
-    "lazyvim.plugins.extras.lang.go",
-    "lazyvim.plugins.extras.lang.typescript"
+
   ],
+  "install_version": 7,
   "news": {
-    "NEWS.md": "10960"
+    "NEWS.md": "11866"
   },
-  "version": 7
+  "version": 8
 }

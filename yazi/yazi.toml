@@ -1,0 +1,11 @@
+[opener]
+extract = [
+	{ run = 'unzip -qo "$@"', desc = "Extract here", for = "unix" },
+	{ run = 'ya pub extract --list %*',   desc = "Extract here", for = "windows" },
+]
+play = [
+	{ run = 'xdg-open "$@"', orphan = true, desc = "Play" },
+]
+open = [
+	{ run = 'xdg-open "$@"', orphan = true, desc = "Open" },
+]

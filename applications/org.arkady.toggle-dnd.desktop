@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Toggle Do Not Disturb
+Exec=/home/arkady/.config/hypr/scripts/toggle_dnd.sh
+Categories=System
+Icon=notifications-disabled-symbolic
+Version=1.0
+Type=Application
+Terminal=false
