@@ -29,7 +29,7 @@ _worktree() {
     local cur prev words cword
     _init_completion || return
 
-    local commands="create open"
+    local commands="create open delete checkout"
 
     case $cword in
         1)
@@ -45,7 +45,7 @@ _worktree() {
                     branches=$(_worktree_branches)
                     COMPREPLY=($(compgen -W "$branches" -- "$cur"))
                     ;;
-                open)
+                open|delete|checkout)
                     local worktrees
                     worktrees=$(_worktree_names)
                     COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))

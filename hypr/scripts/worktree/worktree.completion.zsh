@@ -31,6 +31,8 @@ _worktree_commands() {
     local commands=(
         'create:Create or open worktree for a branch'
         'open:Open worktree with a command'
+        'delete:Delete worktree (asks if uncommitted changes)'
+        'checkout:Delete worktree and checkout branch in main repo'
     )
     _describe -t commands 'command' commands
 }
@@ -53,13 +55,19 @@ _worktree() {
             case $line[1] in
                 create)
                     _arguments \
-                        '1:branch:_worktree_branches'
+                        '1:branch:_worktree_branches' \
+                        '-o[Command to run]:command:_command_names -e' \
+                        '-p[Path within worktree]:path:_files'
                     ;;
                 open)
                     _arguments \
                         '1:worktree:_worktree_names' \
                         '-o[Command to run]:command:_command_names -e' \
                         '-p[Path within worktree]:path:_files'
+                    ;;
+                delete|checkout)
+                    _arguments \
+                        '1:worktree:_worktree_names'
                     ;;
                 *)
                     # Shortcut mode: worktree [CMD] [NAME] [-p PATH]
