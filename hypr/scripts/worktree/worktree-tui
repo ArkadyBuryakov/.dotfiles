@@ -18,9 +18,22 @@ BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m'
 
+# Check if current directory is a non-main worktree
+is_non_main_worktree_tui() {
+    local repo_root
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+    [[ "$(basename "$(dirname "$repo_root")")" == "worktrees" ]]
+}
+
 # Mode definitions
 MODES=("create" "open" "checkout" "delete")
 MODE_LABELS=("CREATE" "OPEN" "CHECKOUT" "DELETE")
+
+# Add CLAUDE mode if in a non-main worktree
+if is_non_main_worktree_tui; then
+    MODES+=("claude")
+    MODE_LABELS+=("CLAUDE")
+fi
 
 error() {
     echo -e "${RED}Error:${NC} $1" >&2
@@ -44,6 +57,9 @@ get_data() {
     case "$mode" in
         create)
             "$WORKTREE_CMD" --complete create
+            ;;
+        claude)
+            "$WORKTREE_CMD" --complete claude
             ;;
         open|checkout|delete)
             "$WORKTREE_CMD" --complete open
@@ -119,6 +135,9 @@ get_prompt() {
         delete)
             echo "Delete: "
             ;;
+        claude)
+            echo "Copy session: "
+            ;;
     esac
 }
 
@@ -166,8 +185,15 @@ run_fzf() {
         --print-query
     )
 
+    # Add tab formatting for claude mode
+    if [[ "$mode" == "claude" ]]; then
+        fzf_opts+=(--delimiter=$'\t' --tabstop=4)
+    fi
+
     # Handle empty data for non-create modes
-    if [[ -z "$data" && "$mode" != "create" ]]; then
+    if [[ -z "$data" && "$mode" == "claude" ]]; then
+        echo "(no sessions available)" | fzf "${fzf_opts[@]}" 2>/dev/null || true
+    elif [[ -z "$data" && "$mode" != "create" ]]; then
         # Show placeholder but keep navigation working
         echo "(no worktrees - use CREATE mode)" | fzf "${fzf_opts[@]}" 2>/dev/null || true
     elif [[ -z "$data" ]]; then
@@ -190,7 +216,7 @@ execute_action() {
     local mode="$1"
     local selection="$2"
 
-    if [[ -z "$selection" || "$selection" == "(no worktrees - use CREATE mode)" ]]; then
+    if [[ -z "$selection" || "$selection" == "(no worktrees - use CREATE mode)" || "$selection" == "(no sessions available)" ]]; then
         return 1
     fi
 
@@ -207,6 +233,11 @@ execute_action() {
         delete)
             # Delete needs terminal interaction for confirmation
             "$WORKTREE_CMD" delete "$selection"
+            ;;
+        claude)
+            local session_id
+            session_id=$(echo "$selection" | cut -f1)
+            "$WORKTREE_CMD" claude copy-session "$session_id"
             ;;
     esac
 }

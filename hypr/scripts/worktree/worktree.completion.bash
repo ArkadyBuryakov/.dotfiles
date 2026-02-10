@@ -29,7 +29,7 @@ _worktree() {
     local cur prev words cword
     _init_completion || return
 
-    local commands="create open delete checkout"
+    local commands="create open delete checkout claude"
 
     case $cword in
         1)
@@ -50,6 +50,9 @@ _worktree() {
                     worktrees=$(_worktree_names)
                     COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))
                     ;;
+                claude)
+                    COMPREPLY=($(compgen -W "copy-session" -- "$cur"))
+                    ;;
                 *)
                     # Shortcut mode: complete worktree names
                     local worktrees
@@ -57,6 +60,13 @@ _worktree() {
                     COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))
                     ;;
             esac
+            ;;
+        3)
+            if [[ "${words[1]}" == "claude" && "${words[2]}" == "copy-session" ]]; then
+                local sessions
+                sessions=$(worktree --complete claude 2>/dev/null | cut -f1)
+                COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
+            fi
             ;;
         *)
             case "$prev" in

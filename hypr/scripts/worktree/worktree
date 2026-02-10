@@ -370,6 +370,65 @@ get_main_worktree() {
   done
 }
 
+# Check if current directory is a non-main worktree (parent dir is "worktrees/")
+is_non_main_worktree() {
+  local repo_root
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+  [[ "$(basename "$(dirname "$repo_root")")" == "worktrees" ]]
+}
+
+# Get Claude project directory for a given path
+get_claude_project_dir() {
+  local path="$1"
+  local encoded
+  encoded=$(echo "$path" | tr '/.' '-')
+  echo "$HOME/.claude/projects/$encoded"
+}
+
+# Get Claude sessions from main worktree's project dir
+# Output: session_id\tDescription
+get_claude_sessions() {
+  local main_worktree
+  main_worktree="$(get_main_worktree)"
+  [[ -z "$main_worktree" ]] && return 0
+
+  local main_project_dir
+  main_project_dir="$(get_claude_project_dir "$main_worktree")"
+  [[ ! -d "$main_project_dir" ]] && return 0
+
+  local index_file="$main_project_dir/sessions-index.json"
+
+  if [[ -f "$index_file" ]] && command -v jq &>/dev/null; then
+    jq -r '.entries[]? | [.sessionId, (.summary // .firstPrompt // "no description")] | @tsv' "$index_file" 2>/dev/null
+  else
+    # Fallback: list .jsonl files
+    local f
+    for f in "$main_project_dir"/*.jsonl; do
+      [[ -f "$f" ]] || continue
+      local sid
+      sid="$(basename "$f" .jsonl)"
+      printf '%s\t%s\n' "$sid" "(no description)"
+    done
+  fi
+}
+
+# Get Claude sessions filtered (exclude already copied ones)
+get_claude_sessions_filtered() {
+  local repo_root
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+  local current_project_dir
+  current_project_dir="$(get_claude_project_dir "$repo_root")"
+
+  get_claude_sessions | while IFS=$'\t' read -r sid desc; do
+    [[ -z "$sid" ]] && continue
+    # Skip if already exists in current worktree's project dir
+    if [[ -f "$current_project_dir/$sid.jsonl" ]]; then
+      continue
+    fi
+    printf '%s\t%s\n' "$sid" "$desc"
+  done
+}
+
 # Command: delete [WORKTREE_NAME]
 cmd_delete() {
   local worktree_name="${1:-}"
@@ -495,6 +554,87 @@ cmd_checkout() {
   echo "cd '$main_worktree'"
 }
 
+# Command: claude copy-session [SESSION_ID]
+cmd_claude_copy_session() {
+  local session_id="${1:-}"
+
+  if [[ -z "$session_id" ]]; then
+    error "Session ID required"
+    return 1
+  fi
+
+  # Guard: must be in a non-main worktree
+  if ! is_non_main_worktree; then
+    error "Must be in a non-main worktree"
+    return 1
+  fi
+
+  # Resolve paths
+  local main_worktree
+  main_worktree="$(get_main_worktree)"
+  [[ -z "$main_worktree" ]] && { error "Could not find main worktree"; return 1; }
+
+  local repo_root
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || { error "Not in a git repo"; return 1; }
+
+  local src_dir dst_dir
+  src_dir="$(get_claude_project_dir "$main_worktree")"
+  dst_dir="$(get_claude_project_dir "$repo_root")"
+
+  # Validate source session exists
+  if [[ ! -f "$src_dir/$session_id.jsonl" ]]; then
+    error "Session '$session_id' not found in $src_dir"
+    return 1
+  fi
+
+  # Check if already copied
+  if [[ -f "$dst_dir/$session_id.jsonl" ]]; then
+    warn "Session '$session_id' already exists in target project dir"
+    return 0
+  fi
+
+  # Create target directory
+  mkdir -p "$dst_dir"
+
+  # Copy session file, rewriting cwd to point to current worktree
+  # Each JSONL entry contains a "cwd" field that Claude Code uses to match sessions to projects
+  sed "s|\"cwd\":\"$main_worktree\"|\"cwd\":\"$repo_root\"|g; s|\"cwd\": \"$main_worktree\"|\"cwd\": \"$repo_root\"|g" \
+    "$src_dir/$session_id.jsonl" > "$dst_dir/$session_id.jsonl"
+
+  # Copy session directory if it exists
+  if [[ -d "$src_dir/$session_id" ]]; then
+    cp -r "$src_dir/$session_id" "$dst_dir/$session_id"
+  fi
+
+  # Update target sessions-index.json
+  if command -v jq &>/dev/null && [[ -f "$src_dir/sessions-index.json" ]]; then
+    local entry
+    entry=$(jq --arg sid "$session_id" '.entries[]? | select(.sessionId == $sid)' "$src_dir/sessions-index.json" 2>/dev/null)
+
+    if [[ -n "$entry" ]]; then
+      # Update fullPath (path to .jsonl file) and projectPath (project root)
+      entry=$(echo "$entry" | jq \
+        --arg fp "$dst_dir/$session_id.jsonl" \
+        --arg pp "$repo_root" \
+        '.fullPath = $fp | .projectPath = $pp')
+
+      if [[ -f "$dst_dir/sessions-index.json" ]]; then
+        # Append entry if not duplicate
+        local updated
+        updated=$(jq --arg sid "$session_id" --argjson entry "$entry" \
+          'if (.entries | map(.sessionId) | index($sid)) then . else .entries += [$entry] end' \
+          "$dst_dir/sessions-index.json" 2>/dev/null)
+        echo "$updated" > "$dst_dir/sessions-index.json"
+      else
+        # Create new index
+        jq -n --argjson entry "$entry" '{version: 1, entries: [$entry]}' > "$dst_dir/sessions-index.json"
+      fi
+    fi
+  fi
+
+  success "Copied session '$session_id' to $dst_dir"
+}
+
 # Generate completions
 generate_completions() {
   local cmd="$1"
@@ -502,6 +642,9 @@ generate_completions() {
   case "$cmd" in
   create)
     get_branches
+    ;;
+  claude)
+    is_non_main_worktree && get_claude_sessions_filtered
     ;;
   open | delete | checkout | *)
     get_worktrees
@@ -530,6 +673,19 @@ main() {
     shift
     cmd_checkout "$@"
     ;;
+  claude)
+    shift
+    local subcmd="${1:-}"
+    case "$subcmd" in
+    copy-session)
+      shift
+      cmd_claude_copy_session "$@"
+      ;;
+    *)
+      error "Unknown claude subcommand: $subcmd (available: copy-session)"
+      ;;
+    esac
+    ;;
   --complete)
     shift
     generate_completions "$@"
@@ -543,6 +699,7 @@ Usage:
     worktree open [NAME] [-o CMD] [-p PATH]      Open existing worktree with command
     worktree delete [NAME]                       Delete worktree (asks if uncommitted changes)
     worktree checkout [NAME]                     Delete worktree and checkout branch in main repo
+    worktree claude copy-session [ID]            Copy Claude session from main worktree
     worktree [CMD] [NAME] [-p PATH]              Shortcut for: worktree open -o CMD
 
 Options:

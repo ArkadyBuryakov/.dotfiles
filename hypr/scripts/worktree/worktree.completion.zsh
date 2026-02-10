@@ -27,12 +27,23 @@ _worktree_names() {
     _describe -t worktrees 'worktree' worktrees
 }
 
+_worktree_claude_sessions() {
+    local sessions=()
+    local line
+    while IFS=$'\t' read -r sid desc; do
+        [[ -z "$sid" ]] && continue
+        sessions+=("$sid:$desc")
+    done < <(worktree --complete claude 2>/dev/null)
+    _describe -t sessions 'session' sessions
+}
+
 _worktree_commands() {
     local commands=(
         'create:Create or open worktree for a branch'
         'open:Open worktree with a command'
         'delete:Delete worktree (asks if uncommitted changes)'
         'checkout:Delete worktree and checkout branch in main repo'
+        'claude:Claude session management'
     )
     _describe -t commands 'command' commands
 }
@@ -68,6 +79,20 @@ _worktree() {
                 delete|checkout)
                     _arguments \
                         '1:worktree:_worktree_names'
+                    ;;
+                claude)
+                    _arguments -C \
+                        '1:subcommand:(copy-session)' \
+                        '*::arg:->claude_args'
+                    case $state in
+                        claude_args)
+                            case $line[1] in
+                                copy-session)
+                                    _arguments '1:session:_worktree_claude_sessions'
+                                    ;;
+                            esac
+                            ;;
+                    esac
                     ;;
                 *)
                     # Shortcut mode: worktree [CMD] [NAME] [-p PATH]
