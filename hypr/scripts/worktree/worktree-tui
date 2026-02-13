@@ -35,6 +35,14 @@ if is_non_main_worktree_tui; then
     MODE_LABELS+=("CLAUDE")
 fi
 
+# Opener definitions (shown in create and open modes)
+OPENERS=("claude" "nvim" "zsh" "lazygit")
+
+# Check if mode supports opener selection
+mode_has_opener() {
+    [[ "$1" == "create" || "$1" == "open" ]]
+}
+
 error() {
     echo -e "${RED}Error:${NC} $1" >&2
     exit 1
@@ -65,6 +73,28 @@ get_data() {
             "$WORKTREE_CMD" --complete open
             ;;
     esac
+}
+
+# Build opener selector line for the header
+build_opener_header() {
+    local current_idx="$1"
+    local line="  "
+
+    for i in "${!OPENERS[@]}"; do
+        local label="${OPENERS[$i]}"
+
+        if [[ $i -eq $current_idx ]]; then
+            line+="[${label}]"
+        else
+            line+=" ${label} "
+        fi
+
+        if [[ $i -lt $((${#OPENERS[@]} - 1)) ]]; then
+            line+=" | "
+        fi
+    done
+
+    echo "$line"
 }
 
 # Build header showing mode tabs
@@ -119,6 +149,19 @@ switch_mode() {
     echo "${MODES[$idx]}"
 }
 
+# Switch to next/previous opener
+switch_opener() {
+    local current_idx="$1"
+    local direction="$2"
+    local num_openers=${#OPENERS[@]}
+
+    if [[ "$direction" == "right" ]]; then
+        echo $(( (current_idx + 1) % num_openers ))
+    else
+        echo $(( (current_idx - 1 + num_openers) % num_openers ))
+    fi
+}
+
 # Get prompt based on mode
 get_prompt() {
     local mode="$1"
@@ -163,6 +206,7 @@ has_worktrees() {
 run_fzf() {
     local mode="$1"
     local data="$2"
+    local opener_idx="${3:--1}"
     local header
     header=$(build_header "$mode")
     local prompt
@@ -174,8 +218,9 @@ run_fzf() {
         --prompt="$prompt"
         --header="$header"
         --header-first
-        --expect="left,right,esc"
+        --expect="left,right,alt-h,alt-l,ctrl-left,ctrl-right,ctrl-alt-l,ctrl-alt-backspace,esc"
         --bind="$bind"
+        --bind="alt-j:down,alt-k:up"
         --no-info
         --layout=reverse
         --height=~50%
@@ -184,6 +229,13 @@ run_fzf() {
         --padding=1
         --print-query
     )
+
+    # Show opener selector below the list for create/open modes
+    if mode_has_opener "$mode"; then
+        local opener_line
+        opener_line=$(build_opener_header "$opener_idx")
+        fzf_opts+=(--preview="echo '$opener_line'" --preview-window=bottom,1,border-top)
+    fi
 
     # Add tab formatting for claude mode
     if [[ "$mode" == "claude" ]]; then
@@ -215,6 +267,7 @@ parse_fzf_output() {
 execute_action() {
     local mode="$1"
     local selection="$2"
+    local opener="${3:-}"
 
     if [[ -z "$selection" || "$selection" == "(no worktrees - use CREATE mode)" || "$selection" == "(no sessions available)" ]]; then
         return 1
@@ -222,10 +275,18 @@ execute_action() {
 
     case "$mode" in
         create)
-            "$WORKTREE_CMD" create "$selection"
+            if [[ -n "$opener" ]]; then
+                "$WORKTREE_CMD" create "$selection" -o "$opener"
+            else
+                "$WORKTREE_CMD" create "$selection"
+            fi
             ;;
         open)
-            "$WORKTREE_CMD" open "$selection"
+            if [[ -n "$opener" ]]; then
+                "$WORKTREE_CMD" open "$selection" -o "$opener"
+            else
+                "$WORKTREE_CMD" open "$selection"
+            fi
             ;;
         checkout)
             "$WORKTREE_CMD" checkout "$selection"
@@ -247,6 +308,7 @@ main() {
     check_deps
 
     local mode="${1:-}"
+    local opener_idx=0  # Default to first opener (claude)
 
     # Validate initial mode if provided
     if [[ -n "$mode" ]]; then
@@ -276,7 +338,7 @@ main() {
         data=$(get_data "$mode")
 
         local result
-        result=$(run_fzf "$mode" "$data")
+        result=$(run_fzf "$mode" "$data" "$opener_idx")
 
         # Parse result (query on line 1, key on line 2, selection on line 3)
         local query key selection
@@ -285,27 +347,42 @@ main() {
         selection=$(echo "$result" | sed -n '3p')
 
         case "$key" in
-            left)
+            left|alt-h)
                 mode=$(switch_mode "$mode" "left")
                 ;;
-            right)
+            right|alt-l)
                 mode=$(switch_mode "$mode" "right")
+                ;;
+            ctrl-left|ctrl-alt-backspace)
+                if mode_has_opener "$mode"; then
+                    opener_idx=$(switch_opener "$opener_idx" "left")
+                fi
+                ;;
+            ctrl-right|ctrl-alt-l)
+                if mode_has_opener "$mode"; then
+                    opener_idx=$(switch_opener "$opener_idx" "right")
+                fi
                 ;;
             esc)
                 exit 0
                 ;;
             *)
-                # Enter was pressed
+                # Enter was pressed - resolve opener for create/open
+                local current_opener=""
+                if mode_has_opener "$mode"; then
+                    current_opener="${OPENERS[$opener_idx]}"
+                fi
+
                 # For create mode, prefer selection, fall back to query
                 if [[ "$mode" == "create" ]]; then
                     if [[ -n "$selection" ]]; then
-                        execute_action "$mode" "$selection"
+                        execute_action "$mode" "$selection" "$current_opener"
                     elif [[ -n "$query" ]]; then
-                        execute_action "$mode" "$query"
+                        execute_action "$mode" "$query" "$current_opener"
                     fi
                 else
                     if [[ -n "$selection" ]]; then
-                        execute_action "$mode" "$selection"
+                        execute_action "$mode" "$selection" "$current_opener"
                     fi
                 fi
                 exit 0

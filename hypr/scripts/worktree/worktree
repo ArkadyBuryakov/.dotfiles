@@ -250,18 +250,31 @@ cmd_create() {
     cmd_arg="$path_arg"
   fi
 
+  # Only pass cmd_arg for explicit paths or nvim (which uses "." to open directory)
+  if [[ "$cmd_arg" == "." && "$command" != "nvim" ]]; then
+    cmd_arg=""
+  fi
+
   # Kitty: open in new OS window
   if is_kitty; then
     local repo_name window_title
     repo_name="$(get_repo_name "$repo_root")"
     window_title="$repo_name: $short_name"
-    kitty_open_window "$window_title" "$cwd" "$command" "$cmd_arg"
+    if [[ -n "$cmd_arg" ]]; then
+      kitty_open_window "$window_title" "$cwd" "$command" "$cmd_arg"
+    else
+      kitty_open_window "$window_title" "$cwd" "$command"
+    fi
     success "Opened worktree in new kitty window: $window_title"
     return 0
   fi
 
   # Default: output command for shell to eval
-  echo "cd '$cwd' && $command '$cmd_arg'"
+  if [[ -n "$cmd_arg" ]]; then
+    echo "cd '$cwd' && $command '$cmd_arg'"
+  else
+    echo "cd '$cwd' && $command"
+  fi
 }
 
 # Command: open [WORKTREE_NAME] [-o COMMAND] [-p PATH]
@@ -328,17 +341,30 @@ cmd_open() {
     cmd_arg="$path_arg"
   fi
 
+  # Only pass cmd_arg for explicit paths or nvim (which uses "." to open directory)
+  if [[ "$cmd_arg" == "." && "$command" != "nvim" ]]; then
+    cmd_arg=""
+  fi
+
   # Kitty: open in new OS window
   if is_kitty; then
     repo_name="$(get_repo_name "$worktree_path")"
     window_title="$repo_name: $worktree_name"
-    kitty_open_window "$window_title" "$cwd" "$command" "$cmd_arg"
+    if [[ -n "$cmd_arg" ]]; then
+      kitty_open_window "$window_title" "$cwd" "$command" "$cmd_arg"
+    else
+      kitty_open_window "$window_title" "$cwd" "$command"
+    fi
     success "Opened '$worktree_name' in new kitty window: $window_title"
     return 0
   fi
 
   # Default: output command for shell to eval
-  echo "cd '$cwd' && $command '$cmd_arg'"
+  if [[ -n "$cmd_arg" ]]; then
+    echo "cd '$cwd' && $command '$cmd_arg'"
+  else
+    echo "cd '$cwd' && $command"
+  fi
 }
 
 # Find worktree path by name
