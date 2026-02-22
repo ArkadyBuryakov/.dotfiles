@@ -1,8 +1,7 @@
 apply_config: apply config files (make symlinks)
-yazi: install yazi
 add_repos: add chaoticaur and arch4edu repositories
 dependencies: install all dependencies
 howdy_setup: install howdy and setup pam configs for it
 antivirus: install and setup clamav
 apps: add symlinks for applications
-local_bin: copy scripts from .local/bin
+local_bin: make symlink for .local/bin folder and source it in path

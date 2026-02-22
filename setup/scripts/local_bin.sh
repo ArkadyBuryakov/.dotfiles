@@ -1,2 +1,2 @@
 #!/bin/bash
-# TODO: copy scripts from .local/bin
+# TODO: make symlink for .local/bin folder and source it in path
