@@ -77,3 +77,14 @@ yazi
 yt-dlp
 zen-browser-bin
 zoxide
+libreoffice-fresh
+bibata-cursor-theme
+git-delta
+teams-for-linux
+v4l2loopback-dkms
+kamoso
+microsoft-azure-vpn-client-bin
+storageexplorer
+kwallet
+kwalletmanager
+dpkg
