@@ -51,7 +51,8 @@ window#waybar {
 #custom-power,
 #wireplumber,
 #bluetooth,
-#network {
+#network,
+#custom-clamav {
 	padding: 0 10px;
 }
 
@@ -59,4 +60,8 @@ window#waybar {
 #battery.warning,
 #battery.critical {
   color: #B53F36
+}
+
+#custom-clamav.threat {
+    color: #B53F36;
 }

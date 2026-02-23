@@ -10,6 +10,7 @@
         "clock"
     ],
     "modules-right": [
+        "custom/clamav",
         "hyprland/language",
         "cpu",
         "memory",
@@ -130,6 +131,12 @@
         "on-click": "wpctl set-mute @DEFAULT_SINK@ toggle",
         "format-icons": [" ", " ", " "],
         "tooltip-format": "{volume} %"
+    },
+    "custom/clamav": {
+        "exec": "~/.config/waybar/scripts/clamav-status.sh",
+        "return-type": "json",
+        "interval": 1,
+        "on-click": "kitty sudo nvim /var/log/clamav/threats.log"
     },
     "bluetooth": {
         "on-click": "kitty bluetuith",

@@ -1,0 +1,9 @@
+[Unit]
+Description=ClamAV weekly full-system scan timer
+
+[Timer]
+OnCalendar=Sat *-*-* 00:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
