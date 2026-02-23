@@ -88,3 +88,4 @@ storageexplorer
 kwallet
 kwalletmanager
 dpkg
+clamav

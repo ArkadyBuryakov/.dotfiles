@@ -1,0 +1,8 @@
+[Unit]
+Description=ClamAV weekly full-system scan
+Wants=clamav-daemon.service
+After=clamav-daemon.service
+
+[Service]
+Type=oneshot
+ExecStart=/etc/clamav/scan-weekly.sh

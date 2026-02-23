@@ -1,0 +1,11 @@
+[Unit]
+Description=ClamAV virus database update
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/freshclam
+
+[Install]
+WantedBy=multi-user.target

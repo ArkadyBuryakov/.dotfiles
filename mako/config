@@ -32,3 +32,7 @@ on-button-right=dismiss-all
 [hidden=1]
 invisible=1
 
+[category=security]
+border-color=#B53F36FF
+default-timeout=600000
+on-button-left=exec kitty sudo nvim /var/log/clamav/threats.log
