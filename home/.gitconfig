@@ -1,0 +1,22 @@
+[credential "https://github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
+[user]
+	name = Arkady Buryakov
+	email = arkady@buryakov.pro
+[core]
+	commentChar = @
+  pager = delta -s
+[interactive]
+  diffFilter = delta -s
+[init]
+  defaultBranch = main
+[delta]
+  navigate = true
+  dark = true
+  line-numbers=true
+[merge]
+  conflictStyle = zdiff3
