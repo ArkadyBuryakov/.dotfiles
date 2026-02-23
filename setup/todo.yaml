@@ -4,4 +4,10 @@ dependencies: install all dependencies
 howdy_setup: install howdy and setup pam configs for it
 antivirus: install and setup clamav
 apps: add symlinks for applications
-local_bin: make symlink for .local/bin folder and source it in path
+aesthetics: >-
+  1. Copy custom icons
+setup_docker: >-
+  Setup user to be able to use docker:
+  1. Create docker user group (catch error if group exists and continue)
+  2. Add user to docker group and apply group to current session with `newgrp docker`
+  3. enable and start service
