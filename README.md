@@ -1,5 +1,9 @@
 # Dotfiles for a simple zenful setup
 
+# TODO
+- finish howdy instruction
+- setup greetd with tui-greet
+
 ## Requirements
 
 - hyprland - wayland compositor and window manager
