@@ -136,7 +136,7 @@
         "exec": "~/.config/waybar/scripts/clamav-status.sh",
         "return-type": "json",
         "interval": 1,
-        "on-click": "kitty sudo nvim /var/log/clamav/threats.log"
+        "on-click": "kitty /etc/clamav/threat-manager.sh"
     },
     "bluetooth": {
         "on-click": "kitty bluetuith",

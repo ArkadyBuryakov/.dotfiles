@@ -35,4 +35,4 @@ invisible=1
 [category=security]
 border-color=#B53F36FF
 default-timeout=600000
-on-button-left=exec kitty sudo nvim /var/log/clamav/threats.log
+on-button-left=exec kitty /etc/clamav/threat-manager.sh
