@@ -90,3 +90,4 @@ kwalletmanager
 dpkg
 clamav
 jq
+ttf-noto-nerd

@@ -5,8 +5,9 @@
 THREATS_LOG="/var/log/clamav/threats.log"
 
 if [[ -s "$THREATS_LOG" ]]; then
-    TOOLTIP="$(tail -5 "$THREATS_LOG" | jq -r '"\(.timestamp) \(.virus_name) \(.file_path)"' 2>/dev/null | sed 's/"/\\"/g' | paste -sd '\n')"
-    echo "{\"text\": \"󰃤\", \"tooltip\": \"$TOOLTIP\", \"class\": \"threat\"}"
-else
-    echo "{\"text\": \"󱏛\", \"tooltip\": \"No threats detected\", \"class\": \"safe\"}"
+  COUNT=$(wc -l <"$THREATS_LOG")
+  TOOLTIP="$(tail -5 "$THREATS_LOG" | jq -r '"\(.timestamp) \(.virus_name) \(.file_path)"' 2>/dev/null | sed 's/"/\\"/g' | paste -sd '\n')"
+  echo "{\"text\": \"󰃤 ${COUNT}!\", \"tooltip\": \"$TOOLTIP\", \"class\": \"threat\"}"
+# else
+#   echo "{\"text\": \"󱏛\", \"tooltip\": \"No threats detected\", \"class\": \"safe\"}"
 fi

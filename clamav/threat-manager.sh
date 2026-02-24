@@ -57,9 +57,7 @@ load_threats() {
     if [[ ! -f "$THREATS_LOG" ]] || [[ ! -s "$THREATS_LOG" ]]; then
         return
     fi
-    while IFS= read -r line; do
-        [[ -n "$line" ]] && THREATS+=("$line")
-    done < "$THREATS_LOG"
+    mapfile -t THREATS < "$THREATS_LOG"
 }
 
 format_threat() {
@@ -139,6 +137,7 @@ draw() {
     printf "${DIM}[${RESET}${CYAN}i${RESET}${DIM}]${RESET} Ignore  "
     printf "${DIM}[${RESET}${CYAN}D${RESET}${DIM}]${RESET} Delete all  "
     printf "${DIM}[${RESET}${CYAN}I${RESET}${DIM}]${RESET} Ignore all  "
+    printf "${DIM}[${RESET}${CYAN}r${RESET}${DIM}]${RESET} Refresh  "
     printf "${DIM}[${RESET}${CYAN}q${RESET}${DIM}]${RESET} Quit"
 }
 
@@ -302,12 +301,12 @@ while true; do
         q) break ;;
         up|k)
             if (( SELECTED > 0 )); then
-                (( SELECTED-- ))
+                SELECTED=$((SELECTED - 1))
             fi
             ;;
         down|j)
             if (( SELECTED < ${#THREATS[@]} - 1 )); then
-                (( SELECTED++ ))
+                SELECTED=$((SELECTED + 1))
             fi
             ;;
         d)
@@ -329,6 +328,10 @@ while true; do
             if (( ${#THREATS[@]} > 0 )); then
                 do_ignore_all
             fi
+            ;;
+        r)
+            load_threats
+            clamp_selected
             ;;
     esac
 done

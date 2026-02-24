@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=ClamAV Threat Manager
+Exec=kitty -T "Antivirus" /etc/clamav/threat-manager.sh
+Categories=System;Security;Antivirus;
+Icon=/home/arkady/Documents/.dotfiles/icons/Apps/Common/shield-bug-outline.png
+Version=1.0
+Type=Application
+Terminal=false
