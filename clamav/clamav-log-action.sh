@@ -30,8 +30,8 @@ case "${1:-}" in
     delete-threat)
         [[ -z "${2:-}" ]] && { echo "ERROR: No file specified" >&2; exit 1; }
         FILE="$2"
-        # Only allow deletion of files actually referenced in the threats log
-        if ! grep -qF -- "$FILE" "$THREATS_LOG" 2>/dev/null; then
+        # Only allow deletion of files actually referenced in the threats log (JSON format)
+        if ! jq -e --arg fp "$FILE" 'select(.file_path == $fp)' "$THREATS_LOG" >/dev/null 2>&1; then
             echo "ERROR: File not referenced in threats log" >&2
             exit 1
         fi
