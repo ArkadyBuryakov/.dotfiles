@@ -89,3 +89,4 @@ kwallet
 kwalletmanager
 dpkg
 clamav
+jq

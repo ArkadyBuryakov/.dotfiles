@@ -35,4 +35,5 @@ invisible=1
 [category=security]
 border-color=#B53F36FF
 default-timeout=600000
-on-button-left=exec kitty /etc/clamav/threat-manager.sh
+on-button-left=exec kitty -T Antivirus /etc/clamav/threat-manager.sh
+

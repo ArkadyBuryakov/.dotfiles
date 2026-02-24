@@ -2,6 +2,8 @@
 # ClamAV Threat Manager - Interactive TUI for managing detected threats.
 # Opens without elevated privileges; escalates only for specific actions
 # via pkexec and a dedicated helper script (polkit auth_admin_keep policy).
+#
+# Threat log format: JSON lines (one JSON object per line).
 
 set -eo pipefail
 
@@ -43,6 +45,7 @@ with_normal_term() {
     stty echo 2>/dev/null
     "$@"
     local rc=$?
+    kitten @ focus-window 2>/dev/null || true
     stty -echo 2>/dev/null
     tput civis 2>/dev/null
     return $rc
@@ -59,15 +62,27 @@ load_threats() {
     done < "$THREATS_LOG"
 }
 
+format_threat() {
+    local json="$1"
+    jq -r '"[\(.timestamp)] \(.virus_name) \u2192 \(.file_path)"' <<< "$json"
+}
+
 extract_filepath() {
-    local line="$1"
-    # Format: [TIMESTAMP] FOUND: VirusName in /path/to/file
-    if [[ "$line" =~ \]\ FOUND:\ .+\ in\ (.+)$ ]]; then
-        printf '%s' "${BASH_REMATCH[1]}"
-    # Format: [TIMESTAMP] /path/to/file: VirusName FOUND
-    elif [[ "$line" =~ \]\ (.+):\ .+\ FOUND$ ]]; then
-        printf '%s' "${BASH_REMATCH[1]}"
-    fi
+    local json="$1"
+    jq -r '.file_path' <<< "$json"
+}
+
+extract_notification_ids() {
+    local json="$1"
+    jq -r '.notification_ids[]?' <<< "$json"
+}
+
+dismiss_notifications() {
+    local json="$1"
+    local nid
+    while IFS= read -r nid; do
+        [[ -n "$nid" ]] && makoctl dismiss -n "$nid" 2>/dev/null || true
+    done < <(extract_notification_ids "$json")
 }
 
 # --- Drawing ---
@@ -107,7 +122,7 @@ draw() {
 
     local i display
     for (( i = visible_start; i < count && i < visible_start + max_visible; i++ )); do
-        display="${THREATS[$i]}"
+        display=$(format_threat "${THREATS[$i]}")
         if (( ${#display} > max_width )); then
             display="${display:0:$((max_width - 1))}…"
         fi
@@ -193,6 +208,8 @@ do_delete() {
     with_normal_term pkexec "$HELPER" log-action "$ts - DELETED - $entry"
     with_normal_term pkexec "$HELPER" remove-entry "$entry"
 
+    dismiss_notifications "$entry"
+
     load_threats
     clamp_selected
     show_status "Deleted." "$GREEN"
@@ -211,6 +228,8 @@ do_ignore() {
 
     with_normal_term pkexec "$HELPER" log-action "$ts - IGNORED - $entry"
     with_normal_term pkexec "$HELPER" remove-entry "$entry"
+
+    dismiss_notifications "$entry"
 
     load_threats
     clamp_selected
@@ -235,6 +254,7 @@ do_delete_all() {
         fi
         with_normal_term pkexec "$HELPER" log-action "$ts - DELETED - $entry"
         with_normal_term pkexec "$HELPER" remove-entry "$entry"
+        dismiss_notifications "$entry"
     done
 
     load_threats
@@ -256,6 +276,7 @@ do_ignore_all() {
         entry="${THREATS[$i]}"
         with_normal_term pkexec "$HELPER" log-action "$ts - IGNORED - $entry"
         with_normal_term pkexec "$HELPER" remove-entry "$entry"
+        dismiss_notifications "$entry"
     done
 
     load_threats
