@@ -12,8 +12,15 @@ sudo cp "$CLAMAV_SRC/clamd.conf" /etc/clamav/clamd.conf
 sudo cp "$CLAMAV_SRC/freshclam.conf" /etc/clamav/freshclam.conf
 sudo cp "$CLAMAV_SRC/virus-event.bash" /etc/clamav/virus-event.bash
 sudo cp "$CLAMAV_SRC/scan-weekly.sh" /etc/clamav/scan-weekly.sh
-sudo chmod +x /etc/clamav/virus-event.bash /etc/clamav/scan-weekly.sh
-echo "==> Copied ClamAV configs to /etc/clamav/"
+sudo cp "$CLAMAV_SRC/threat-manager.sh" /etc/clamav/threat-manager.sh
+sudo cp "$CLAMAV_SRC/clamav-log-action.sh" /etc/clamav/clamav-log-action.sh
+sudo chmod +x /etc/clamav/virus-event.bash /etc/clamav/scan-weekly.sh \
+    /etc/clamav/threat-manager.sh /etc/clamav/clamav-log-action.sh
+echo "==> Copied ClamAV configs and scripts to /etc/clamav/"
+
+# Install polkit policy for threat manager
+sudo cp "$CLAMAV_SRC/com.clamav.threat-manager.policy" /usr/share/polkit-1/actions/
+echo "==> Installed polkit policy for threat manager"
 
 # Install sudoers drop-in for clamav notify-send
 sudo cp "$CLAMAV_SRC/sudoers-clamav" /etc/sudoers.d/clamav
@@ -22,9 +29,9 @@ echo "==> Installed sudoers drop-in for clamav"
 
 # Create log directory and threat log
 sudo mkdir -p /var/log/clamav
-sudo touch /var/log/clamav/threats.log /var/log/clamav/weekly-scan.log
+sudo touch /var/log/clamav/threats.log /var/log/clamav/weekly-scan.log /var/log/clamav/actions.log
 sudo chown -R clamav:clamav /var/log/clamav
-sudo chmod 644 /var/log/clamav/threats.log /var/log/clamav/weekly-scan.log
+sudo chmod 644 /var/log/clamav/threats.log /var/log/clamav/weekly-scan.log /var/log/clamav/actions.log
 echo "==> Created log files"
 
 # Install systemd units
