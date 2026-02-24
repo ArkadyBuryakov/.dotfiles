@@ -65,3 +65,7 @@ window#waybar {
 #custom-clamav.threat {
     color: #B53F36;
 }
+
+#custom-clamav.stale {
+    color: #D4A947;
+}

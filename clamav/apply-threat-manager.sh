@@ -13,4 +13,13 @@ for script in "${SCRIPTS[@]}"; do
     sudo chmod +x "/etc/clamav/$script"
 done
 
-echo "Deployed: ${SCRIPTS[*]}"
+sudo cp "$CLAMAV_SRC/com.clamav.threat-manager.policy" /usr/share/polkit-1/actions/
+
+# Ensure new log files exist
+for f in scan-history.log scan-state.json; do
+    sudo touch "/var/log/clamav/$f"
+    sudo chown clamav:clamav "/var/log/clamav/$f"
+    sudo chmod 644 "/var/log/clamav/$f"
+done
+
+echo "Deployed: ${SCRIPTS[*]} + polkit policy"

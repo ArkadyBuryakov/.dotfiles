@@ -29,13 +29,13 @@ echo "==> Installed sudoers drop-in for clamav"
 
 # Create log directory and threat log
 sudo mkdir -p /var/log/clamav
-sudo touch /var/log/clamav/threats.log /var/log/clamav/weekly-scan.log /var/log/clamav/actions.log
+sudo touch /var/log/clamav/threats.log /var/log/clamav/weekly-scan.log /var/log/clamav/actions.log /var/log/clamav/last-scan-timestamp /var/log/clamav/scan-history.log /var/log/clamav/scan-state.json
 sudo chown -R clamav:clamav /var/log/clamav
-sudo chmod 644 /var/log/clamav/threats.log /var/log/clamav/weekly-scan.log /var/log/clamav/actions.log
+sudo chmod 644 /var/log/clamav/threats.log /var/log/clamav/weekly-scan.log /var/log/clamav/actions.log /var/log/clamav/last-scan-timestamp /var/log/clamav/scan-history.log /var/log/clamav/scan-state.json
 echo "==> Created log files"
 
 # Install systemd units
-UNITS=(clamav-freshclam-update.service clamav-freshclam-update.timer clamav-weekly-scan.service clamav-weekly-scan.timer)
+UNITS=(clamav-freshclam-update.service clamav-freshclam-update.timer)
 for unit in "${UNITS[@]}"; do
     sudo cp "$CLAMAV_SRC/$unit" "/etc/systemd/system/$unit"
 done
@@ -55,7 +55,8 @@ sudo systemctl enable --now clamav-daemon.service
 sudo systemctl enable --now clamav-clamonacc.service
 sudo systemctl enable --now clamav-freshclam-update.service
 sudo systemctl enable --now clamav-freshclam-update.timer
-sudo systemctl enable --now clamav-weekly-scan.timer
+# Disable old weekly scan timer if present (scans are now on-demand from TUI)
+sudo systemctl disable --now clamav-weekly-scan.timer 2>/dev/null || true
 echo "==> Enabled and started ClamAV services"
 
 echo "==> ClamAV antivirus setup complete!"
