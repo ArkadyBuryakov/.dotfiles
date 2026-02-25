@@ -14,6 +14,7 @@ START_EPOCH=$(date +%s)
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
 SCAN_COMPLETED=false
 MONITOR_PID=""
+INHIBIT_PID=""
 
 echo "[$TIMESTAMP] Starting full scan" >> "$SCAN_LOG"
 
@@ -49,6 +50,12 @@ write_history() {
     if [[ -n "$MONITOR_PID" ]] && kill -0 "$MONITOR_PID" 2>/dev/null; then
         kill "$MONITOR_PID" 2>/dev/null
         wait "$MONITOR_PID" 2>/dev/null || true
+    fi
+
+    # Release inhibit lock if held
+    if [[ -n "$INHIBIT_PID" ]] && kill -0 "$INHIBIT_PID" 2>/dev/null; then
+        kill "$INHIBIT_PID" 2>/dev/null
+        wait "$INHIBIT_PID" 2>/dev/null || true
     fi
 
     local end_ts end_epoch duration_s status threats_found
@@ -90,7 +97,7 @@ write_history() {
     date '+%Y-%m-%d %H:%M:%S' > "$LAST_SCAN_TS_FILE"
 
     # Clean up
-    rm -f "$SCAN_STATE" "$SCAN_OUTPUT"
+    rm -f "$SCAN_STATE" "$SCAN_STATE.curdir" "$SCAN_OUTPUT"
 }
 
 trap write_history EXIT
@@ -100,14 +107,17 @@ progress_monitor() {
     while true; do
         sleep 2
         if [[ -f "$SCAN_OUTPUT" ]]; then
-            local scanned now_ts
+            local scanned now_ts curdir
             scanned=$(wc -l < "$SCAN_OUTPUT" 2>/dev/null) || scanned=0
             now_ts="$(date '+%Y-%m-%d %H:%M:%S')"
+            curdir=""
+            [[ -f "$SCAN_STATE.curdir" ]] && curdir=$(cat "$SCAN_STATE.curdir" 2>/dev/null) || true
             if [[ -f "$SCAN_STATE" ]]; then
                 jq -c \
                     --argjson scanned "$scanned" \
                     --arg activity "$now_ts" \
-                    '.files_scanned=$scanned | .last_activity=$activity' \
+                    --arg curdir "${curdir:-}" \
+                    '.files_scanned=$scanned | .last_activity=$activity | .current_dir=$curdir' \
                     "$SCAN_STATE" > "$SCAN_STATE.tmp" 2>/dev/null \
                     && mv "$SCAN_STATE.tmp" "$SCAN_STATE"
             fi
@@ -118,9 +128,22 @@ progress_monitor() {
 progress_monitor &
 MONITOR_PID=$!
 
-# Run scan with suspend inhibition — no --infected, output all results for progress.
+# Inhibit sleep for the duration of the scan
 systemd-inhibit --what=sleep --who="ClamAV" --why="Full system scan" --mode=block \
-    clamdscan --multiscan --fdpass "${SCAN_DIRS[@]}" > "$SCAN_OUTPUT" 2>&1 || true
+    sleep infinity &
+INHIBIT_PID=$!
+
+# Scan each top-level directory individually so output flushes between directories,
+# giving the progress monitor more accurate file counts.
+for dir in "${SCAN_DIRS[@]}"; do
+    printf '%s' "$dir" > "$SCAN_STATE.curdir" 2>/dev/null || true
+    clamdscan --multiscan --fdpass "$dir" >> "$SCAN_OUTPUT" 2>&1 || true
+done
+
+# Release sleep inhibit lock
+kill "$INHIBIT_PID" 2>/dev/null
+wait "$INHIBIT_PID" 2>/dev/null || true
+INHIBIT_PID=""
 
 # Kill monitor
 if kill -0 "$MONITOR_PID" 2>/dev/null; then
