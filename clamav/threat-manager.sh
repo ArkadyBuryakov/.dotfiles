@@ -361,10 +361,6 @@ draw_scan_page() {
 }
 
 draw_keybindings() {
-    local rows
-    rows=$(tput lines)
-    tput cup $((rows - 2)) 0
-
     if [[ "$PAGE" == "threats" ]]; then
         if (( ${#THREATS[@]} > 0 )); then
             printf " ${DIM}[${RESET}${CYAN}d${RESET}${DIM}]${RESET} Delete  "
@@ -383,22 +379,20 @@ draw_keybindings() {
             printf "${DIM}[${RESET}${CYAN}j${RESET}${DIM}/${RESET}${CYAN}k${RESET}${DIM}]${RESET} Scroll  "
         fi
     fi
-
     printf "${DIM}[${RESET}${CYAN}h${RESET}${DIM}/${RESET}${CYAN}l${RESET}${DIM}]${RESET} Navigate  "
     printf "${DIM}[${RESET}${CYAN}q${RESET}${DIM}]${RESET} Quit"
 }
 
 draw() {
-    tput clear
-    draw_header
+    local rows content keys
+    rows=$(tput lines)
 
-    if [[ "$PAGE" == "threats" ]]; then
-        draw_threats_page
-    else
-        draw_scan_page
-    fi
+    content="$(draw_header; if [[ "$PAGE" == "threats" ]]; then draw_threats_page; else draw_scan_page; fi)"
+    content="${content//$'\n'/$'\033[K\n'}"
+    keys="$(draw_keybindings)"
 
-    draw_keybindings
+    # Single atomic write: home, content, clear-to-bottom, position keybindings, keys, clear-eol
+    printf '\033[H%s\033[J\033[%d;1H%s\033[K' "$content" "$((rows - 1))" "$keys"
 }
 
 # --- Input ---

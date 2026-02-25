@@ -156,39 +156,5 @@ SCAN_COMPLETED=true
 
 echo "[$TIMESTAMP] Full scan finished" >> "$SCAN_LOG"
 
-# Extract FOUND lines and log each as JSON
-FOUND_LINES="$(grep 'FOUND$' "$SCAN_OUTPUT")" || true
-
-if [[ -n "$FOUND_LINES" ]]; then
-    while IFS= read -r line; do
-        # Parse clamdscan output: /path/to/file: VirusName FOUND
-        FILE_PATH="${line%%:*}"
-        REMAINDER="${line#*: }"
-        VIRUS_NAME="${REMAINDER% FOUND}"
-
-        # Send per-threat notification to all active sessions, capturing IDs
-        ALERT="$VIRUS_NAME in $FILE_PATH"
-        NOTIFICATION_IDS=()
-
-        for ADDRESS in /run/user/*; do
-            USERID="${ADDRESS#/run/user/}"
-            NID=$(/usr/bin/sudo -u "#$USERID" \
-                DBUS_SESSION_BUS_ADDRESS="unix:path=$ADDRESS/bus" \
-                /usr/bin/notify-send -u critical -c security -t 600000 -p \
-                -i dialog-warning "Scan: threat found" "$ALERT" 2>/dev/null) || continue
-            [[ -n "$NID" ]] && NOTIFICATION_IDS+=("$NID")
-        done
-
-        # Build JSON array of notification IDs
-        NID_JSON=$(printf '%s\n' "${NOTIFICATION_IDS[@]}" | jq -Rn '[inputs | select(length > 0) | tonumber]')
-
-        # Write JSON line to threats log
-        jq -cn \
-            --arg ts "$TIMESTAMP" \
-            --arg vn "$VIRUS_NAME" \
-            --arg fp "$FILE_PATH" \
-            --argjson nids "$NID_JSON" \
-            '{timestamp:$ts, virus_name:$vn, file_path:$fp, notification_ids:$nids}' \
-            >> "$THREATS_LOG"
-    done <<< "$FOUND_LINES"
-fi
+# Threat logging and notifications are handled in real-time by clamd's
+# VirusEvent handler (virus-event.bash) — no post-scan processing needed.
