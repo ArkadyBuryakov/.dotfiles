@@ -276,7 +276,11 @@ draw_scan_page() {
 
         # Progress from state file
         if [[ -f "$SCAN_STATE" ]] && [[ -s "$SCAN_STATE" ]]; then
-            local scanned activity
+            local scanned activity current_dir
+            current_dir=$(jq -r '.current_dir // empty' "$SCAN_STATE" 2>/dev/null) || true
+            if [[ -n "${current_dir:-}" ]]; then
+                printf " ${DIM}Scanning:${RESET} %s\n" "$current_dir"
+            fi
             scanned=$(jq -r '.files_scanned // 0' "$SCAN_STATE" 2>/dev/null) || true
             scanned=${scanned:-0}
             printf " ${DIM}Scanned:${RESET} %d files\n" "$scanned"
