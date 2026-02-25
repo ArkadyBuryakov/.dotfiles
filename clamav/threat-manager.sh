@@ -33,6 +33,13 @@ HISTORY_SCROLL=0
 PAGE="scan"   # "threats" or "scan"
 SCAN_PID=""
 SCAN_START_EPOCH=""
+TREE_VIEW=0                # 0 = flat list (default), 1 = tree view
+declare -A DIR_EXPANDED    # dir_path -> "1" if expanded
+declare -a VISIBLE_ITEMS   # "virtual:IDX", "dir:IDX", or "file:TIDX:DEPTH"
+declare -a DIR_ORDER       # ordered unique directory paths
+declare -A DIR_THREATS     # dir_path -> space-separated indices into THREATS[]
+declare -a TREE_NODES      # "depth|type|path|label" — hierarchical tree
+declare -a TREE_COUNTS     # threat count per tree node
 
 # --- Terminal ---
 setup_term() {
@@ -70,10 +77,194 @@ with_normal_term() {
 # --- Data ---
 load_threats() {
     THREATS=()
-    if [[ ! -f "$THREATS_LOG" ]] || [[ ! -s "$THREATS_LOG" ]]; then
+    if [[ -f "$THREATS_LOG" ]] && [[ -s "$THREATS_LOG" ]]; then
+        mapfile -t THREATS < "$THREATS_LOG"
+    fi
+    build_tree
+}
+
+build_tree() {
+    DIR_ORDER=()
+    DIR_THREATS=()
+    TREE_NODES=()
+    TREE_COUNTS=()
+    VISIBLE_ITEMS=()
+
+    if (( ${#THREATS[@]} == 0 )); then
         return
     fi
-    mapfile -t THREATS < "$THREATS_LOG"
+
+    # Group threats by parent directory
+    local -A seen_dirs
+    local i filepath dirpath
+    for (( i = 0; i < ${#THREATS[@]}; i++ )); do
+        filepath=$(extract_filepath "${THREATS[$i]}")
+        dirpath=$(dirname "$filepath")
+        if [[ -z "${seen_dirs[$dirpath]+x}" ]]; then
+            DIR_ORDER+=("$dirpath")
+            seen_dirs[$dirpath]=1
+            DIR_THREATS[$dirpath]="$i"
+        else
+            DIR_THREATS[$dirpath]="${DIR_THREATS[$dirpath]} $i"
+        fi
+    done
+
+    # Sort directories
+    local -a sorted_dirs
+    mapfile -t sorted_dirs < <(printf '%s\n' "${DIR_ORDER[@]}" | sort)
+
+    # Build raw tree by walking sorted paths and emitting trie nodes
+    local -a prev_parts=()
+    local j common
+    for dirpath in "${sorted_dirs[@]}"; do
+        local -a parts=()
+        IFS='/' read -ra _raw <<< "$dirpath"
+        for _p in "${_raw[@]}"; do
+            [[ -n "$_p" ]] && parts+=("$_p")
+        done
+        if (( ${#parts[@]} == 0 )); then
+            parts=("/")
+        fi
+
+        # Common prefix length with previous path
+        common=0
+        for (( j = 0; j < ${#prev_parts[@]} && j < ${#parts[@]}; j++ )); do
+            if [[ "${parts[$j]}" == "${prev_parts[$j]}" ]]; then
+                common=$((common + 1))
+            else
+                break
+            fi
+        done
+
+        # Emit virtual nodes for new intermediate components
+        for (( j = common; j < ${#parts[@]} - 1; j++ )); do
+            local partial=""
+            local k
+            for (( k = 0; k <= j; k++ )); do
+                partial+="/${parts[$k]}"
+            done
+            TREE_NODES+=("${j}|virtual|${partial}|${parts[$j]}")
+        done
+
+        # Emit leaf dir node
+        local leaf_depth=$(( ${#parts[@]} - 1 ))
+        TREE_NODES+=("${leaf_depth}|dir|${dirpath}|${parts[${#parts[@]}-1]}")
+
+        prev_parts=("${parts[@]}")
+    done
+
+    _compress_tree_nodes
+    _compute_tree_counts
+    _build_visible
+}
+
+_compress_tree_nodes() {
+    local changed=1
+    while (( changed )); do
+        changed=0
+        local -a new_nodes=()
+        local i=0 n=${#TREE_NODES[@]}
+
+        while (( i < n )); do
+            local depth type path label
+            IFS='|' read -r depth type path label <<< "${TREE_NODES[$i]}"
+
+            if [[ "$type" == "virtual" ]]; then
+                # Count direct children at depth+1 within this subtree
+                local child_count=0 subtree_end=$((i + 1))
+                local j jdepth
+                for (( j = i + 1; j < n; j++ )); do
+                    IFS='|' read -r jdepth _ _ _ <<< "${TREE_NODES[$j]}"
+                    if (( jdepth <= depth )); then break; fi
+                    if (( jdepth == depth + 1 )); then child_count=$((child_count + 1)); fi
+                    subtree_end=$((j + 1))
+                done
+
+                if (( child_count == 1 )); then
+                    # Merge with single child: update child label/depth, shift descendants
+                    local cdepth ctype cpath clabel
+                    IFS='|' read -r cdepth ctype cpath clabel <<< "${TREE_NODES[$((i+1))]}"
+                    TREE_NODES[$((i+1))]="${depth}|${ctype}|${cpath}|${label}/${clabel}"
+
+                    for (( j = i + 2; j < subtree_end; j++ )); do
+                        local jrest
+                        IFS='|' read -r jdepth jrest <<< "${TREE_NODES[$j]}"
+                        TREE_NODES[$j]="$((jdepth - 1))|${jrest}"
+                    done
+
+                    changed=1
+                    i=$((i + 1))
+                    continue
+                fi
+            fi
+
+            new_nodes+=("${TREE_NODES[$i]}")
+            i=$((i + 1))
+        done
+
+        TREE_NODES=("${new_nodes[@]}")
+    done
+}
+
+_compute_tree_counts() {
+    TREE_COUNTS=()
+    local i n=${#TREE_NODES[@]}
+
+    for (( i = 0; i < n; i++ )); do
+        local depth type path
+        IFS='|' read -r depth type path _ <<< "${TREE_NODES[$i]}"
+
+        if [[ "$type" == "dir" ]]; then
+            local indices=(${DIR_THREATS[$path]})
+            TREE_COUNTS[$i]=${#indices[@]}
+        else
+            # Virtual: sum all descendant dir threat counts
+            local total=0 j jdepth jtype jpath
+            for (( j = i + 1; j < n; j++ )); do
+                IFS='|' read -r jdepth jtype jpath _ <<< "${TREE_NODES[$j]}"
+                if (( jdepth <= depth )); then break; fi
+                if [[ "$jtype" == "dir" ]]; then
+                    local idxs=(${DIR_THREATS[$jpath]})
+                    total=$((total + ${#idxs[@]}))
+                fi
+            done
+            TREE_COUNTS[$i]=$total
+        fi
+    done
+}
+
+_build_visible() {
+    VISIBLE_ITEMS=()
+    local skip_depth=-1
+    local i n=${#TREE_NODES[@]}
+
+    for (( i = 0; i < n; i++ )); do
+        local depth type path
+        IFS='|' read -r depth type path _ <<< "${TREE_NODES[$i]}"
+
+        if (( skip_depth >= 0 )); then
+            if (( depth > skip_depth )); then
+                continue
+            fi
+            skip_depth=-1
+        fi
+
+        if [[ "$type" == "virtual" ]]; then
+            VISIBLE_ITEMS+=("virtual:${i}")
+            if [[ "${DIR_EXPANDED[$path]}" != "1" ]]; then
+                skip_depth=$depth
+            fi
+        else
+            VISIBLE_ITEMS+=("dir:${i}")
+            if [[ "${DIR_EXPANDED[$path]}" == "1" ]]; then
+                local indices=(${DIR_THREATS[$path]})
+                local j
+                for j in "${indices[@]}"; do
+                    VISIBLE_ITEMS+=("file:${j}:${depth}")
+                done
+            fi
+        fi
+    done
 }
 
 load_scan_history() {
@@ -115,6 +306,11 @@ detect_running_scan() {
 format_threat() {
     local json="$1"
     jq -r '"[\(.timestamp)] \(.virus_name) \u2192 \(.file_path)"' <<< "$json"
+}
+
+format_threat_short() {
+    local json="$1"
+    jq -r '"[\(.timestamp)] \(.virus_name) \u2192 \(.file_path | split("/") | last)"' <<< "$json"
 }
 
 extract_filepath() {
@@ -224,7 +420,7 @@ draw_header() {
     printf '\n\n'
 }
 
-draw_threats_page() {
+draw_threats_flat() {
     local cols rows count
     cols=$(tput cols)
     rows=$(tput lines)
@@ -258,6 +454,93 @@ draw_threats_page() {
             printf "   ${DIM}%s${RESET}\n" "$display"
         fi
     done
+}
+
+draw_threats_tree() {
+    local cols rows vis_count
+    cols=$(tput cols)
+    rows=$(tput lines)
+    vis_count=${#VISIBLE_ITEMS[@]}
+
+    if (( vis_count == 0 )); then
+        printf " ${GREEN}No threats detected.${RESET}\n"
+        return
+    fi
+
+    local max_width=$((cols - 4))
+    local max_visible=$((rows - 6))
+    local visible_start=0
+
+    if (( max_visible < 1 )); then max_visible=1; fi
+
+    if (( SELECTED >= visible_start + max_visible )); then
+        visible_start=$((SELECTED - max_visible + 1))
+    fi
+
+    local i
+    for (( i = visible_start; i < vis_count && i < visible_start + max_visible; i++ )); do
+        local item="${VISIBLE_ITEMS[$i]}"
+        local vtype="${item%%:*}"
+        local vrest="${item#*:}"
+
+        if [[ "$vtype" == "virtual" || "$vtype" == "dir" ]]; then
+            local tree_idx="$vrest"
+            local ndepth ntype npath nlabel
+            IFS='|' read -r ndepth ntype npath nlabel <<< "${TREE_NODES[$tree_idx]}"
+            local count="${TREE_COUNTS[$tree_idx]}"
+
+            local arrow="▶"
+            [[ "${DIR_EXPANDED[$npath]}" == "1" ]] && arrow="▼"
+
+            local display_label="$nlabel"
+            if (( ndepth == 0 )) && [[ "$npath" == /* ]]; then
+                display_label="/${nlabel}"
+            fi
+
+            local indent=""
+            local d; for (( d = 0; d < ndepth; d++ )); do indent+="  "; done
+
+            local line="${indent}${arrow} ${display_label}  (${count})"
+            if (( ${#line} > max_width )); then
+                line="${line:0:$((max_width - 1))}…"
+            fi
+
+            if (( i == SELECTED )); then
+                printf " ${BOLD_RED}▸ %s${RESET}\n" "$line"
+            else
+                printf "   ${YELLOW}%s${RESET}\n" "$line"
+            fi
+        else
+            # file entry: "file:THREAT_IDX:DEPTH"
+            local threat_idx="${vrest%%:*}"
+            local file_depth="${vrest##*:}"
+
+            local display
+            display=$(format_threat_short "${THREATS[$threat_idx]}")
+
+            local indent=""
+            local d; for (( d = 0; d <= file_depth; d++ )); do indent+="  "; done
+
+            local line="${indent}${display}"
+            if (( ${#line} > max_width )); then
+                line="${line:0:$((max_width - 1))}…"
+            fi
+
+            if (( i == SELECTED )); then
+                printf " ${BOLD_RED}▸ %s${RESET}\n" "$line"
+            else
+                printf "   ${DIM}%s${RESET}\n" "$line"
+            fi
+        fi
+    done
+}
+
+draw_threats_page() {
+    if (( TREE_VIEW )); then
+        draw_threats_tree
+    else
+        draw_threats_flat
+    fi
 }
 
 draw_scan_page() {
@@ -368,6 +651,12 @@ draw_keybindings() {
             printf "${DIM}[${RESET}${CYAN}D${RESET}${DIM}]${RESET} Delete all  "
             printf "${DIM}[${RESET}${CYAN}I${RESET}${DIM}]${RESET} Ignore all  "
             printf "${DIM}[${RESET}${CYAN}r${RESET}${DIM}]${RESET} Refresh  "
+            if (( TREE_VIEW )); then
+                printf "${DIM}[${RESET}${CYAN}enter${RESET}${DIM}]${RESET} Expand  "
+                printf "${DIM}[${RESET}${CYAN}t${RESET}${DIM}]${RESET} Flat  "
+            else
+                printf "${DIM}[${RESET}${CYAN}t${RESET}${DIM}]${RESET} Tree  "
+            fi
         fi
     else
         if is_scan_alive; then
@@ -398,8 +687,9 @@ draw() {
 # --- Input ---
 read_key() {
     local key
-    IFS= read -rsn1 -t 1 key || true
-    if [[ -z "$key" ]]; then
+    IFS= read -rsn1 -t 1 key
+    local rc=$?
+    if (( rc > 0 )) && [[ -z "$key" ]]; then
         printf 'timeout'
         return
     fi
@@ -411,7 +701,7 @@ read_key() {
             '[D') printf 'left' ;;
             '[C') printf 'right' ;;
         esac
-    elif [[ "$key" == "" ]]; then
+    elif [[ -z "$key" ]]; then
         printf 'enter'
     else
         printf '%s' "$key"
@@ -439,10 +729,18 @@ show_status() {
 }
 
 clamp_selected() {
-    if (( ${#THREATS[@]} == 0 )); then
-        SELECTED=0
-    elif (( SELECTED >= ${#THREATS[@]} )); then
-        SELECTED=$(( ${#THREATS[@]} - 1 ))
+    if (( TREE_VIEW )); then
+        if (( ${#VISIBLE_ITEMS[@]} == 0 )); then
+            SELECTED=0
+        elif (( SELECTED >= ${#VISIBLE_ITEMS[@]} )); then
+            SELECTED=$(( ${#VISIBLE_ITEMS[@]} - 1 ))
+        fi
+    else
+        if (( ${#THREATS[@]} == 0 )); then
+            SELECTED=0
+        elif (( SELECTED >= ${#THREATS[@]} )); then
+            SELECTED=$(( ${#THREATS[@]} - 1 ))
+        fi
     fi
 }
 
@@ -545,6 +843,102 @@ do_ignore_all() {
     show_status "All threats ignored." "$GREEN"
 }
 
+do_delete_node() {
+    local tree_idx="$1"
+    local depth type path label
+    IFS='|' read -r depth type path label <<< "${TREE_NODES[$tree_idx]}"
+    local count="${TREE_COUNTS[$tree_idx]}"
+
+    local display_label="$label"
+    (( depth == 0 )) && [[ "$path" == /* ]] && display_label="/${label}"
+
+    if ! confirm "Delete ALL ${count} threat(s) in ${display_label}?"; then
+        return
+    fi
+
+    # Collect all threat indices under this node
+    local -a all_indices=()
+    if [[ "$type" == "dir" ]]; then
+        all_indices=(${DIR_THREATS[$path]})
+    else
+        local j jdepth jtype jpath
+        for (( j = tree_idx + 1; j < ${#TREE_NODES[@]}; j++ )); do
+            IFS='|' read -r jdepth jtype jpath _ <<< "${TREE_NODES[$j]}"
+            if (( jdepth <= depth )); then break; fi
+            if [[ "$jtype" == "dir" ]]; then
+                all_indices+=(${DIR_THREATS[$jpath]})
+            fi
+        done
+    fi
+
+    local ts idx filepath entry
+    ts="$(date '+%Y-%m-%d %H:%M:%S')"
+
+    # Sort indices in reverse to avoid shift issues
+    local -a sorted_indices
+    mapfile -t sorted_indices < <(printf '%s\n' "${all_indices[@]}" | sort -rn)
+
+    for idx in "${sorted_indices[@]}"; do
+        entry="${THREATS[$idx]}"
+        filepath=$(extract_filepath "$entry")
+        if [[ -n "$filepath" ]]; then
+            with_normal_term pkexec "$HELPER" delete-threat "$filepath"
+        fi
+        with_normal_term pkexec "$HELPER" log-action "$ts - DELETED - $entry"
+        with_normal_term pkexec "$HELPER" remove-entry "$entry"
+        dismiss_notifications "$entry"
+    done
+
+    load_threats
+    clamp_selected
+    show_status "Deleted ${count} threats from ${display_label}." "$GREEN"
+}
+
+do_ignore_node() {
+    local tree_idx="$1"
+    local depth type path label
+    IFS='|' read -r depth type path label <<< "${TREE_NODES[$tree_idx]}"
+    local count="${TREE_COUNTS[$tree_idx]}"
+
+    local display_label="$label"
+    (( depth == 0 )) && [[ "$path" == /* ]] && display_label="/${label}"
+
+    if ! confirm "Ignore ALL ${count} threat(s) in ${display_label}?"; then
+        return
+    fi
+
+    local -a all_indices=()
+    if [[ "$type" == "dir" ]]; then
+        all_indices=(${DIR_THREATS[$path]})
+    else
+        local j jdepth jtype jpath
+        for (( j = tree_idx + 1; j < ${#TREE_NODES[@]}; j++ )); do
+            IFS='|' read -r jdepth jtype jpath _ <<< "${TREE_NODES[$j]}"
+            if (( jdepth <= depth )); then break; fi
+            if [[ "$jtype" == "dir" ]]; then
+                all_indices+=(${DIR_THREATS[$jpath]})
+            fi
+        done
+    fi
+
+    local ts idx entry
+    ts="$(date '+%Y-%m-%d %H:%M:%S')"
+
+    local -a sorted_indices
+    mapfile -t sorted_indices < <(printf '%s\n' "${all_indices[@]}" | sort -rn)
+
+    for idx in "${sorted_indices[@]}"; do
+        entry="${THREATS[$idx]}"
+        with_normal_term pkexec "$HELPER" log-action "$ts - IGNORED - $entry"
+        with_normal_term pkexec "$HELPER" remove-entry "$entry"
+        dismiss_notifications "$entry"
+    done
+
+    load_threats
+    clamp_selected
+    show_status "Ignored ${count} threats from ${display_label}." "$GREEN"
+}
+
 # --- Main ---
 if [[ -f "$THREATS_LOG" && ! -r "$THREATS_LOG" ]]; then
     printf 'Cannot read %s\n' "$THREATS_LOG" >&2
@@ -580,23 +974,68 @@ while true; do
     # Page-specific keys
     if [[ "$PAGE" == "threats" ]]; then
         case "$key" in
+            t)
+                TREE_VIEW=$(( 1 - TREE_VIEW ))
+                SELECTED=0
+                ;;
             up|k)
                 if (( SELECTED > 0 )); then
                     SELECTED=$((SELECTED - 1))
                 fi
                 ;;
             down|j)
-                if (( SELECTED < ${#THREATS[@]} - 1 )); then
-                    SELECTED=$((SELECTED + 1))
+                if (( TREE_VIEW )); then
+                    if (( SELECTED < ${#VISIBLE_ITEMS[@]} - 1 )); then
+                        SELECTED=$((SELECTED + 1))
+                    fi
+                else
+                    if (( SELECTED < ${#THREATS[@]} - 1 )); then
+                        SELECTED=$((SELECTED + 1))
+                    fi
+                fi
+                ;;
+            enter|' ')
+                if (( TREE_VIEW )) && (( ${#VISIBLE_ITEMS[@]} > 0 )); then
+                    _item="${VISIBLE_ITEMS[$SELECTED]}"
+                    _type="${_item%%:*}"
+                    if [[ "$_type" == "virtual" || "$_type" == "dir" ]]; then
+                        _tree_idx="${_item#*:}"
+                        IFS='|' read -r _ _ _path _ <<< "${TREE_NODES[$_tree_idx]}"
+                        if [[ "${DIR_EXPANDED[$_path]}" == "1" ]]; then
+                            DIR_EXPANDED[$_path]="0"
+                        else
+                            DIR_EXPANDED[$_path]="1"
+                        fi
+                        _build_visible
+                        clamp_selected
+                    fi
                 fi
                 ;;
             d)
-                if (( ${#THREATS[@]} > 0 )); then
+                if (( TREE_VIEW )) && (( ${#VISIBLE_ITEMS[@]} > 0 )); then
+                    _item="${VISIBLE_ITEMS[$SELECTED]}"
+                    _type="${_item%%:*}"
+                    _rest="${_item#*:}"
+                    if [[ "$_type" == "virtual" || "$_type" == "dir" ]]; then
+                        do_delete_node "$_rest"
+                    elif [[ "$_type" == "file" ]]; then
+                        do_delete "${_rest%%:*}"
+                    fi
+                elif (( ! TREE_VIEW )) && (( ${#THREATS[@]} > 0 )); then
                     do_delete "$SELECTED"
                 fi
                 ;;
             i)
-                if (( ${#THREATS[@]} > 0 )); then
+                if (( TREE_VIEW )) && (( ${#VISIBLE_ITEMS[@]} > 0 )); then
+                    _item="${VISIBLE_ITEMS[$SELECTED]}"
+                    _type="${_item%%:*}"
+                    _rest="${_item#*:}"
+                    if [[ "$_type" == "virtual" || "$_type" == "dir" ]]; then
+                        do_ignore_node "$_rest"
+                    elif [[ "$_type" == "file" ]]; then
+                        do_ignore "${_rest%%:*}"
+                    fi
+                elif (( ! TREE_VIEW )) && (( ${#THREATS[@]} > 0 )); then
                     do_ignore "$SELECTED"
                 fi
                 ;;
