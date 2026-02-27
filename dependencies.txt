@@ -93,3 +93,7 @@ yazi
 yt-dlp
 zen-browser-bin
 zoxide
+yaak-bin
+postgresql
+pyright
+krita
