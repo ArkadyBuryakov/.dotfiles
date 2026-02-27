@@ -8,6 +8,20 @@ TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
 VIRUS_NAME="$CLAM_VIRUSEVENT_VIRUSNAME"
 FILE_PATH="$CLAM_VIRUSEVENT_FILENAME"
 
+# Excluded paths — skip logging and notifications for known false positives
+EXCLUDED_PATHS=(
+    "/home/*/.cache/mozilla"
+    "/home/*/.cache/zen"
+    "/home/*/.config/libreoffice"
+    "/usr/lib/libreoffice"
+    "/usr/share/libreoffice"
+)
+
+for pattern in "${EXCLUDED_PATHS[@]}"; do
+    # shellcheck disable=SC2254
+    [[ "$FILE_PATH" == $pattern* ]] && exit 0
+done
+
 # Send notification to all logged-in user sessions, capturing notification IDs
 ALERT="$VIRUS_NAME in $FILE_PATH"
 NOTIFICATION_IDS=()
