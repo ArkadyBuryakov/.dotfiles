@@ -28,41 +28,160 @@ return {
         return vim.fn.getreg("v")
       end
 
-      function FindCurrentSql()
-        -- Get the current node
-        local ts = vim.treesitter
-        local node = ts.get_node()
+      local query_types = { statement = true, subquery = true }
+      local hl_ns = vim.api.nvim_create_namespace("sql_query_highlight")
+
+      function FindCurrentSql(callback)
+        local node = vim.treesitter.get_node()
         if node == nil then
           error("No SQL statement found under cursor")
         end
 
-        local parent = node:parent()
-
-        while parent ~= nil and parent:type() ~= "program" do
-          node = parent
-          parent = node:parent()
+        local bufnr = vim.api.nvim_get_current_buf()
+        local queries = {}
+        while node ~= nil do
+          if query_types[node:type()] then
+            table.insert(queries, 1, node) -- prepend: biggest first
+          end
+          node = node:parent()
         end
 
-        if node:type() ~= "statement" then
+        if #queries == 0 then
           error("No SQL statement found under cursor")
         end
-        return node
+
+        if #queries == 1 then
+          callback(queries[1])
+          return
+        end
+
+        local function highlight_node(n)
+          vim.api.nvim_buf_clear_namespace(bufnr, hl_ns, 0, -1)
+          local sr, sc, er, ec = n:range()
+          vim.highlight.range(bufnr, hl_ns, "Visual", { sr, sc }, { er, ec })
+        end
+
+        local function format_entry(n)
+          local text = vim.treesitter.get_node_text(n, bufnr)
+          local first_line
+          for line in text:gmatch("[^\n]+") do
+            local trimmed = line:match("^%s*(.-)%s*$")
+            if trimmed ~= "" and trimmed ~= "(" and trimmed ~= ")" then
+              first_line = trimmed
+              break
+            end
+          end
+          first_line = first_line or text:gsub("\n", " ")
+          if #first_line > 80 then
+            first_line = first_line:sub(1, 77) .. "..."
+          end
+          local line_count = n:end_() - n:start() + 1
+          if line_count > 1 then
+            return first_line .. " (" .. line_count .. " lines)"
+          end
+          return first_line
+        end
+
+        -- Build display lines
+        local lines = {}
+        local max_width = 0
+        for i, n in ipairs(queries) do
+          local line = (i == 1 and "> " or "  ") .. format_entry(n)
+          lines[i] = line
+          if #line > max_width then max_width = #line end
+        end
+
+        -- Create floating window
+        local width = math.min(max_width + 2, math.floor(vim.o.columns * 0.8))
+        local height = #lines
+        local win_opts = {
+          relative = "editor",
+          row = math.floor(vim.o.lines / 4),
+          col = math.floor((vim.o.columns - width) / 2),
+          width = width,
+          height = height,
+          style = "minimal",
+          border = "rounded",
+          title = " Select SQL query ",
+          title_pos = "center",
+        }
+        local float_buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, lines)
+        vim.bo[float_buf].modifiable = false
+        local float_win = vim.api.nvim_open_win(float_buf, true, win_opts)
+        vim.wo[float_win].cursorline = true
+        vim.api.nvim_win_set_cursor(float_win, { 1, 0 })
+
+        local selected = 1
+        highlight_node(queries[selected])
+
+        local function update_cursor()
+          vim.bo[float_buf].modifiable = true
+          for i = 1, #lines do
+            local prefix = i == selected and "> " or "  "
+            lines[i] = prefix .. format_entry(queries[i])
+          end
+          vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, lines)
+          vim.bo[float_buf].modifiable = false
+          vim.api.nvim_win_set_cursor(float_win, { selected, 0 })
+          highlight_node(queries[selected])
+        end
+
+        local function close()
+          vim.api.nvim_buf_clear_namespace(bufnr, hl_ns, 0, -1)
+          if vim.api.nvim_win_is_valid(float_win) then
+            vim.api.nvim_win_close(float_win, true)
+          end
+          vim.api.nvim_buf_delete(float_buf, { force = true })
+        end
+
+        local keymaps = {
+          ["j"] = function()
+            if selected < #queries then
+              selected = selected + 1
+              update_cursor()
+            end
+          end,
+          ["k"] = function()
+            if selected > 1 then
+              selected = selected - 1
+              update_cursor()
+            end
+          end,
+          ["<CR>"] = function()
+            local choice = queries[selected]
+            close()
+            callback(choice)
+          end,
+          ["<Esc>"] = close,
+          ["q"] = close,
+        }
+        keymaps["<C-n>"] = keymaps["j"]
+        keymaps["<C-p>"] = keymaps["k"]
+        keymaps["<Down>"] = keymaps["j"]
+        keymaps["<Up>"] = keymaps["k"]
+
+        for key, fn in pairs(keymaps) do
+          vim.keymap.set("n", key, fn, { buffer = float_buf, nowait = true })
+        end
       end
 
       function SelectCurrentSql()
-        local node = FindCurrentSql()
-        local sr, sc, er, ec = node:range()
-        vim.fn.setpos("'<", { 0, sr + 1, sc + 1, 0 })
-        vim.fn.setpos("'>", { 0, er + 1, ec, 0 })
-        vim.cmd("normal! gv")
+        FindCurrentSql(function(node)
+          local sr, sc, er, ec = node:range()
+          vim.fn.setpos("'<", { 0, sr + 1, sc + 1, 0 })
+          vim.fn.setpos("'>", { 0, er + 1, ec, 0 })
+          vim.cmd("normal! gv")
+        end)
       end
 
       function RunCurrentSql()
         local current_pos = vim.api.nvim_win_get_cursor(0)
-        local node = FindCurrentSql()
-        local text = vim.treesitter.get_node_text(node, 0)
-        vim.cmd.DB(text)
-        vim.api.nvim_win_set_cursor(0, current_pos)
+        FindCurrentSql(function(node)
+          local text = vim.treesitter.get_node_text(node, 0)
+          vim.cmd.DB(text)
+          vim.api.nvim_win_set_cursor(0, current_pos)
+        end)
       end
 
       local function export_query(query, psql_flags, ft)
@@ -88,16 +207,18 @@ return {
       end
 
       function ExportCurrentSqlCsv()
-        local node = FindCurrentSql()
-        local text = strip_semicolon(vim.treesitter.get_node_text(node, 0))
-        export_query("COPY (" .. text .. ") TO STDOUT WITH (FORMAT CSV, HEADER)", {}, "csv")
+        FindCurrentSql(function(node)
+          local text = strip_semicolon(vim.treesitter.get_node_text(node, 0))
+          export_query("COPY (" .. text .. ") TO STDOUT WITH (FORMAT CSV, HEADER)", {}, "csv")
+        end)
       end
 
       function ExportCurrentSqlJson()
-        local node = FindCurrentSql()
-        local text = strip_semicolon(vim.treesitter.get_node_text(node, 0))
-        local query = "SELECT jsonb_pretty(jsonb_agg(to_jsonb(t))) FROM (" .. text .. ") t"
-        export_query(query, { "--quiet", "-t", "-A" }, "json")
+        FindCurrentSql(function(node)
+          local text = strip_semicolon(vim.treesitter.get_node_text(node, 0))
+          local query = "SELECT jsonb_pretty(jsonb_agg(to_jsonb(t))) FROM (" .. text .. ") t"
+          export_query(query, { "--quiet", "-t", "-A" }, "json")
+        end)
       end
 
       function RunSelectedSql()
