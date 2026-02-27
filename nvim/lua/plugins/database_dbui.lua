@@ -28,6 +28,11 @@ return {
         return vim.fn.getreg("v")
       end
 
+      local function json_query(sql)
+        return "SELECT jsonb_pretty(CASE WHEN jsonb_array_length(r) = 1 THEN r->0 ELSE r END) "
+          .. "FROM (SELECT jsonb_agg(to_jsonb(t)) r FROM (" .. sql .. ") t) s"
+      end
+
       local query_types = { statement = true, subquery = true }
       local hl_ns = vim.api.nvim_create_namespace("sql_query_highlight")
 
@@ -184,7 +189,7 @@ return {
         end)
       end
 
-      local function export_query(query, psql_flags, ft)
+      local function run_export(query, psql_flags)
         local url = vim.b.db
         if not url then
           error("No database connection. Use :DBUIFindBuffer to connect first.")
@@ -196,28 +201,39 @@ return {
         if vim.v.shell_error ~= 0 then
           error("psql error: " .. result)
         end
-        vim.cmd("enew")
-        local lines = vim.split(result, "\n")
-        if lines[#lines] == "" then
-          table.remove(lines)
+        if result:sub(-1) == "\n" then
+          result = result:sub(1, -2)
         end
-        vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+        return result
+      end
+
+      local function export_to_buffer(query, psql_flags, ft)
+        local result = run_export(query, psql_flags)
+        vim.cmd("enew")
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(result, "\n"))
         vim.bo.buftype = "nofile"
         vim.bo.filetype = ft
+      end
+
+      local function export_to_clipboard(query, psql_flags)
+        local result = run_export(query, psql_flags)
+        vim.fn.setreg('"', result)
+        vim.fn.setreg('+', result)
+        vim.notify("Copied to clipboard", vim.log.levels.INFO)
       end
 
       function ExportCurrentSqlCsv()
         FindCurrentSql(function(node)
           local text = strip_semicolon(vim.treesitter.get_node_text(node, 0))
-          export_query("COPY (" .. text .. ") TO STDOUT WITH (FORMAT CSV, HEADER)", {}, "csv")
+          export_to_buffer("COPY (" .. text .. ") TO STDOUT WITH (FORMAT CSV, HEADER)", {}, "csv")
         end)
       end
 
       function ExportCurrentSqlJson()
         FindCurrentSql(function(node)
           local text = strip_semicolon(vim.treesitter.get_node_text(node, 0))
-          local query = "SELECT jsonb_pretty(jsonb_agg(to_jsonb(t))) FROM (" .. text .. ") t"
-          export_query(query, { "--quiet", "-t", "-A" }, "json")
+          local query = json_query(text)
+          export_to_buffer(query, { "--quiet", "-t", "-A" }, "json")
         end)
       end
 
@@ -233,8 +249,34 @@ return {
 
       function ExportSelectedSqlJson()
         local text = strip_semicolon(get_visual_selection())
-        local query = "SELECT jsonb_pretty(jsonb_agg(to_jsonb(t))) FROM (" .. text .. ") t"
-        export_query(query, { "--quiet", "-t", "-A" }, "json")
+        local query = json_query(text)
+        export_to_buffer(query, { "--quiet", "-t", "-A" }, "json")
+      end
+
+      function YankCurrentSqlCsv()
+        FindCurrentSql(function(node)
+          local text = strip_semicolon(vim.treesitter.get_node_text(node, 0))
+          export_to_clipboard("COPY (" .. text .. ") TO STDOUT WITH (FORMAT CSV, HEADER)", {})
+        end)
+      end
+
+      function YankCurrentSqlJson()
+        FindCurrentSql(function(node)
+          local text = strip_semicolon(vim.treesitter.get_node_text(node, 0))
+          local query = json_query(text)
+          export_to_clipboard(query, { "--quiet", "-t", "-A" })
+        end)
+      end
+
+      function YankSelectedSqlCsv()
+        local text = strip_semicolon(get_visual_selection())
+        export_to_clipboard("COPY (" .. text .. ") TO STDOUT WITH (FORMAT CSV, HEADER)", {})
+      end
+
+      function YankSelectedSqlJson()
+        local text = strip_semicolon(get_visual_selection())
+        local query = json_query(text)
+        export_to_clipboard(query, { "--quiet", "-t", "-A" })
       end
 
       function ConnectBuffer()
@@ -274,8 +316,12 @@ return {
         { "<leader>Se",  group = "SQL Export" },
         { "<leader>Sec", ExportCurrentSqlCsv,    desc = "Export as CSV" },
         { "<leader>Sej", ExportCurrentSqlJson,  desc = "Export as JSON" },
-        { "<leader>Sec", ExportSelectedSqlCsv,  desc = "Export as CSV",  mode = "v" },
-        { "<leader>Sej", ExportSelectedSqlJson, desc = "Export as JSON", mode = "v" },
+        { "<leader>SeC", YankCurrentSqlCsv,     desc = "Copy CSV to clipboard" },
+        { "<leader>SeJ", YankCurrentSqlJson,    desc = "Copy JSON to clipboard" },
+        { "<leader>Sec", ExportSelectedSqlCsv,  desc = "Export as CSV",           mode = "v" },
+        { "<leader>Sej", ExportSelectedSqlJson, desc = "Export as JSON",          mode = "v" },
+        { "<leader>SeC", YankSelectedSqlCsv,    desc = "Copy CSV to clipboard",   mode = "v" },
+        { "<leader>SeJ", YankSelectedSqlJson,   desc = "Copy JSON to clipboard",  mode = "v" },
       })
     end,
   },
