@@ -23,6 +23,7 @@ return {
             ".pytest_cache",
             ".obsidian",
             ".mypy_cache",
+            ".db_ui",
           },
           never_show = {},
         },
