@@ -237,6 +237,27 @@ return {
         export_query(query, { "--quiet", "-t", "-A" }, "json")
       end
 
+      function ConnectBuffer()
+        if vim.b.db then
+          local file = vim.api.nvim_buf_get_name(0)
+          local cursor = vim.api.nvim_win_get_cursor(0)
+          local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+          local was_modified = vim.bo.modified
+          vim.cmd("bwipeout!")
+          if file ~= "" then
+            vim.cmd("edit " .. vim.fn.fnameescape(file))
+            if was_modified then
+              vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+            end
+          else
+            vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+            vim.bo.filetype = "sql"
+          end
+          pcall(vim.api.nvim_win_set_cursor, 0, cursor)
+        end
+        vim.cmd("DBUIFindBuffer")
+      end
+
       function IsDBUI()
         return vim.bo.filetype == "dbui"
       end
@@ -249,7 +270,7 @@ return {
         { "<leader>Sv", SelectCurrentSql,      desc = "Select Statement under Cursor" },
         { "<leader>Ss", RunSelectedSql,         desc = "Run Selected",                 mode = "v" },
         { "<leader>Sa", ":%DB<CR>",            desc = "Run All Queries",              mode = { "n", "v" } },
-        { "<leader>Sc", ":DBUIFindBuffer<CR>", desc = "Connect to DataBase",          mode = { "n", "v" } },
+        { "<leader>Sc", ConnectBuffer,           desc = "Connect to DataBase",          mode = { "n", "v" } },
         { "<leader>Se",  group = "SQL Export" },
         { "<leader>Sec", ExportCurrentSqlCsv,    desc = "Export as CSV" },
         { "<leader>Sej", ExportCurrentSqlJson,  desc = "Export as JSON" },
