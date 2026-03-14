@@ -140,6 +140,7 @@
     },
     "bluetooth": {
         "on-click": "kitty bluetuith",
+        "on-click-right": "bluetoothctl -- connect 44:73:D6:A5:28:10",
         "format": "󰂯",
         "format-off": "󰂲",
         "format-connected": "󰂱",

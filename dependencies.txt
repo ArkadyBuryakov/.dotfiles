@@ -37,7 +37,6 @@ hyprpicker
 hyprpolkitagent
 jq
 k9s
-kamoso
 kdenlive
 keyd
 kitty
@@ -97,3 +96,19 @@ yaak-bin
 postgresql
 pyright
 krita
+plymouth
+qt6ct
+nix
+direnv
+qemu-full
+gnome-calculator
+tldr
+snapshot
+microsoft-azure-vpn-client-bin
+google-chrome
+evince
+rclone
+kooha
+lnav
+rustup
+baobab

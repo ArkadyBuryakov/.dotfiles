@@ -1,6 +1,7 @@
 on-button-left=invoke-default-action
 on-button-right=dismiss-all
 default-timeout=10000
+max-history=1000
 
 anchor=bottom-right
 
@@ -34,6 +35,6 @@ invisible=1
 
 [category=security]
 border-color=#B53F36FF
-default-timeout=600000
+default-timeout=30000
 on-button-left=exec kitty -T Antivirus /etc/clamav/threat-manager.sh
 

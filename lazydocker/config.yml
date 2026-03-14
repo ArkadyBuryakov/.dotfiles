@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://json.schemastore.org/lazydocker.json
+
+gui:
+  returnImmediately: true
+
+customCommands:
+  containers:
+    - name: lnav
+      attach: true
+      command: "lnav docker://{{ .Container.ID }}"
