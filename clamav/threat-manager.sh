@@ -33,7 +33,7 @@ HISTORY_SCROLL=0
 PAGE="scan"   # "threats" or "scan"
 SCAN_PID=""
 SCAN_START_EPOCH=""
-TREE_VIEW=0                # 0 = flat list (default), 1 = tree view
+TREE_MODE=0                # 0 = flat, 1 = path tree, 2 = signature tree
 declare -A DIR_EXPANDED    # dir_path -> "1" if expanded
 declare -a VISIBLE_ITEMS   # "virtual:IDX", "dir:IDX", or "file:TIDX:DEPTH"
 declare -a DIR_ORDER       # ordered unique directory paths
@@ -80,7 +80,15 @@ load_threats() {
     if [[ -f "$THREATS_LOG" ]] && [[ -s "$THREATS_LOG" ]]; then
         mapfile -t THREATS < "$THREATS_LOG"
     fi
-    build_tree
+    rebuild_tree
+}
+
+rebuild_tree() {
+    if (( TREE_MODE == 1 )); then
+        build_tree
+    elif (( TREE_MODE == 2 )); then
+        build_sig_tree
+    fi
 }
 
 build_tree() {
@@ -267,6 +275,74 @@ _build_visible() {
     done
 }
 
+build_sig_tree() {
+    DIR_ORDER=()
+    DIR_THREATS=()
+    TREE_NODES=()
+    TREE_COUNTS=()
+    VISIBLE_ITEMS=()
+
+    if (( ${#THREATS[@]} == 0 )); then
+        return
+    fi
+
+    # Group threats by virus_name
+    local -A seen_sigs
+    local i virusname
+    for (( i = 0; i < ${#THREATS[@]}; i++ )); do
+        virusname=$(extract_virusname "${THREATS[$i]}")
+        if [[ -z "${seen_sigs[$virusname]+x}" ]]; then
+            DIR_ORDER+=("$virusname")
+            seen_sigs[$virusname]=1
+            DIR_THREATS[$virusname]="$i"
+        else
+            DIR_THREATS[$virusname]="${DIR_THREATS[$virusname]} $i"
+        fi
+    done
+
+    # Sort signatures
+    local -a sorted_sigs
+    mapfile -t sorted_sigs < <(printf '%s\n' "${DIR_ORDER[@]}" | sort)
+
+    # Build trie by splitting signatures on '.' and '-'
+    local -a prev_parts=()
+    local j common
+    for virusname in "${sorted_sigs[@]}"; do
+        local -a parts=()
+        IFS='.-' read -ra parts <<< "$virusname"
+
+        # Common prefix length with previous
+        common=0
+        for (( j = 0; j < ${#prev_parts[@]} && j < ${#parts[@]}; j++ )); do
+            if [[ "${parts[$j]}" == "${prev_parts[$j]}" ]]; then
+                common=$((common + 1))
+            else
+                break
+            fi
+        done
+
+        # Emit virtual nodes for new intermediate components
+        for (( j = common; j < ${#parts[@]} - 1; j++ )); do
+            local partial="${parts[0]}"
+            local k
+            for (( k = 1; k <= j; k++ )); do
+                partial+=".${parts[$k]}"
+            done
+            TREE_NODES+=("${j}|virtual|${partial}|${parts[$j]}")
+        done
+
+        # Emit leaf node for the full signature
+        local leaf_depth=$(( ${#parts[@]} - 1 ))
+        TREE_NODES+=("${leaf_depth}|dir|${virusname}|${parts[${#parts[@]}-1]}")
+
+        prev_parts=("${parts[@]}")
+    done
+
+    _compress_tree_nodes
+    _compute_tree_counts
+    _build_visible
+}
+
 load_scan_history() {
     HISTORY_ENTRIES=()
     if [[ ! -f "$SCAN_HISTORY" ]] || [[ ! -s "$SCAN_HISTORY" ]]; then
@@ -316,6 +392,11 @@ format_threat_short() {
 extract_filepath() {
     local json="$1"
     jq -r '.file_path' <<< "$json"
+}
+
+extract_virusname() {
+    local json="$1"
+    jq -r '.virus_name' <<< "$json"
 }
 
 extract_notification_ids() {
@@ -516,7 +597,11 @@ draw_threats_tree() {
             local file_depth="${vrest##*:}"
 
             local display
-            display=$(format_threat_short "${THREATS[$threat_idx]}")
+            if (( TREE_MODE == 2 )); then
+                display=$(format_threat "${THREATS[$threat_idx]}")
+            else
+                display=$(format_threat_short "${THREATS[$threat_idx]}")
+            fi
 
             local indent=""
             local d; for (( d = 0; d <= file_depth; d++ )); do indent+="  "; done
@@ -536,7 +621,7 @@ draw_threats_tree() {
 }
 
 draw_threats_page() {
-    if (( TREE_VIEW )); then
+    if (( TREE_MODE )); then
         draw_threats_tree
     else
         draw_threats_flat
@@ -651,12 +736,14 @@ draw_keybindings() {
             printf "${DIM}[${RESET}${CYAN}D${RESET}${DIM}]${RESET} Delete all  "
             printf "${DIM}[${RESET}${CYAN}I${RESET}${DIM}]${RESET} Ignore all  "
             printf "${DIM}[${RESET}${CYAN}r${RESET}${DIM}]${RESET} Refresh  "
-            if (( TREE_VIEW )); then
+            if (( TREE_MODE )); then
                 printf "${DIM}[${RESET}${CYAN}enter${RESET}${DIM}]${RESET} Expand  "
-                printf "${DIM}[${RESET}${CYAN}t${RESET}${DIM}]${RESET} Flat  "
-            else
-                printf "${DIM}[${RESET}${CYAN}t${RESET}${DIM}]${RESET} Tree  "
             fi
+            case "$TREE_MODE" in
+                0) printf "${DIM}[${RESET}${CYAN}t${RESET}${DIM}]${RESET} Path tree  " ;;
+                1) printf "${DIM}[${RESET}${CYAN}t${RESET}${DIM}]${RESET} Sig tree  " ;;
+                2) printf "${DIM}[${RESET}${CYAN}t${RESET}${DIM}]${RESET} Flat  " ;;
+            esac
         fi
     else
         if is_scan_alive; then
@@ -729,7 +816,7 @@ show_status() {
 }
 
 clamp_selected() {
-    if (( TREE_VIEW )); then
+    if (( TREE_MODE )); then
         if (( ${#VISIBLE_ITEMS[@]} == 0 )); then
             SELECTED=0
         elif (( SELECTED >= ${#VISIBLE_ITEMS[@]} )); then
@@ -975,8 +1062,10 @@ while true; do
     if [[ "$PAGE" == "threats" ]]; then
         case "$key" in
             t)
-                TREE_VIEW=$(( 1 - TREE_VIEW ))
+                TREE_MODE=$(( (TREE_MODE + 1) % 3 ))
+                DIR_EXPANDED=()
                 SELECTED=0
+                rebuild_tree
                 ;;
             up|k)
                 if (( SELECTED > 0 )); then
@@ -984,7 +1073,7 @@ while true; do
                 fi
                 ;;
             down|j)
-                if (( TREE_VIEW )); then
+                if (( TREE_MODE )); then
                     if (( SELECTED < ${#VISIBLE_ITEMS[@]} - 1 )); then
                         SELECTED=$((SELECTED + 1))
                     fi
@@ -995,7 +1084,7 @@ while true; do
                 fi
                 ;;
             enter|' ')
-                if (( TREE_VIEW )) && (( ${#VISIBLE_ITEMS[@]} > 0 )); then
+                if (( TREE_MODE )) && (( ${#VISIBLE_ITEMS[@]} > 0 )); then
                     _item="${VISIBLE_ITEMS[$SELECTED]}"
                     _type="${_item%%:*}"
                     if [[ "$_type" == "virtual" || "$_type" == "dir" ]]; then
@@ -1012,7 +1101,7 @@ while true; do
                 fi
                 ;;
             d)
-                if (( TREE_VIEW )) && (( ${#VISIBLE_ITEMS[@]} > 0 )); then
+                if (( TREE_MODE )) && (( ${#VISIBLE_ITEMS[@]} > 0 )); then
                     _item="${VISIBLE_ITEMS[$SELECTED]}"
                     _type="${_item%%:*}"
                     _rest="${_item#*:}"
@@ -1021,12 +1110,12 @@ while true; do
                     elif [[ "$_type" == "file" ]]; then
                         do_delete "${_rest%%:*}"
                     fi
-                elif (( ! TREE_VIEW )) && (( ${#THREATS[@]} > 0 )); then
+                elif (( ! TREE_MODE )) && (( ${#THREATS[@]} > 0 )); then
                     do_delete "$SELECTED"
                 fi
                 ;;
             i)
-                if (( TREE_VIEW )) && (( ${#VISIBLE_ITEMS[@]} > 0 )); then
+                if (( TREE_MODE )) && (( ${#VISIBLE_ITEMS[@]} > 0 )); then
                     _item="${VISIBLE_ITEMS[$SELECTED]}"
                     _type="${_item%%:*}"
                     _rest="${_item#*:}"
@@ -1035,7 +1124,7 @@ while true; do
                     elif [[ "$_type" == "file" ]]; then
                         do_ignore "${_rest%%:*}"
                     fi
-                elif (( ! TREE_VIEW )) && (( ${#THREATS[@]} > 0 )); then
+                elif (( ! TREE_MODE )) && (( ${#THREATS[@]} > 0 )); then
                     do_ignore "$SELECTED"
                 fi
                 ;;

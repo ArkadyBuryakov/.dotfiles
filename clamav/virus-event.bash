@@ -17,11 +17,23 @@ EXCLUDED_PATHS=(
   "/usr/share/libreoffice"
   "/home/*/.local/share/Steam/steamapps/common/Proton"
   "/home/*/.snapshots"
+  "/var/lib/containerd"
 )
 
 for pattern in "${EXCLUDED_PATHS[@]}"; do
   # shellcheck disable=SC2254
   [[ "$FILE_PATH" == $pattern* ]] && exit 0
+done
+
+# Excluded signatures — skip by virus/PUA name (supports wildcards)
+EXCLUDED_SIGNATURES=(
+  "PUA.Win.Trojan.Xored-1"
+  "PUA.Win.Packer.NspackDotnetNor-2"
+)
+
+for pattern in "${EXCLUDED_SIGNATURES[@]}"; do
+  # shellcheck disable=SC2254
+  [[ "$VIRUS_NAME" == $pattern ]] && exit 0
 done
 
 # Send notification to all logged-in user sessions, capturing notification IDs
