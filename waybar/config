@@ -7,9 +7,11 @@
         "hyprland/workspaces"
     ],
     "modules-center": [
+        "custom/anki",
         "clock"
     ],
     "modules-right": [
+        "custom/dnd",
         "custom/clamav",
         "hyprland/language",
         "cpu",
@@ -131,6 +133,18 @@
         "on-click": "wpctl set-mute @DEFAULT_SINK@ toggle",
         "format-icons": [" ", " ", " "],
         "tooltip-format": "{volume} %"
+    },
+    "custom/anki": {
+        "exec": "~/.config/waybar/scripts/anki-status.sh",
+        "return-type": "json",
+        "interval": 300,
+        "on-click": "anki"
+    },
+    "custom/dnd": {
+        "exec": "makoctl mode | grep -q do-not-disturb && echo '{\"text\": \"󰂛\", \"class\": \"active\", \"tooltip\": \"Do not disturb: ON\"}' || echo '{\"text\": \"\", \"class\": \"\", \"tooltip\": \"\"}'",
+        "return-type": "json",
+        "interval": 1,
+        "on-click": "~/.config/hypr/scripts/toggle_dnd.sh"
     },
     "custom/clamav": {
         "exec": "~/.config/waybar/scripts/clamav-status.sh",

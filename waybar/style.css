@@ -52,7 +52,9 @@ window#waybar {
 #wireplumber,
 #bluetooth,
 #network,
-#custom-clamav {
+#custom-dnd,
+#custom-clamav,
+#custom-anki {
 	padding: 0 10px;
 }
 
@@ -67,5 +69,13 @@ window#waybar {
 }
 
 #custom-clamav.stale {
+    color: #D4A947;
+}
+
+#custom-dnd.active {
+    color: #B53F36;
+}
+
+#custom-anki.due {
     color: #D4A947;
 }
