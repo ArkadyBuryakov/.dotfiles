@@ -60,7 +60,7 @@ noto-fonts-emoji
 npm
 obsidian
 obs-studio
-opencode-bin
+opencode
 pavucontrol
 pnpm
 pyenv
@@ -112,3 +112,7 @@ kooha
 lnav
 rustup
 baobab
+qbittorrent
+duckdb
+anki
+supabase_bin
