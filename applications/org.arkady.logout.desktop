@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Logout
-Exec=loginctl terminate-user $USER
+Exec=sh -c 'loginctl terminate-user $USER'
 Categories=Session Management
 Icon=~/.config/wlogout/icons/logout.png
 Version=1.0
