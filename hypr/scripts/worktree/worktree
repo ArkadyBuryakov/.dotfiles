@@ -422,17 +422,39 @@ get_claude_sessions() {
   main_project_dir="$(get_claude_project_dir "$main_worktree")"
   [[ ! -d "$main_project_dir" ]] && return 0
 
-  local index_file="$main_project_dir/sessions-index.json"
+  local history_file="$HOME/.claude/history.jsonl"
 
-  if [[ -f "$index_file" ]] && command -v jq &>/dev/null; then
-    jq -r '.entries[]? | [.sessionId, (.summary // .firstPrompt // "no description")] | @tsv' "$index_file" 2>/dev/null
+  # Collect session IDs from .jsonl files in project dir
+  local session_ids=()
+  local f
+  for f in "$main_project_dir"/*.jsonl; do
+    [[ -f "$f" ]] || continue
+    session_ids+=("$(basename "$f" .jsonl)")
+  done
+  [[ ${#session_ids[@]} -eq 0 ]] && return 0
+
+  # Look up first user message per session from history.jsonl as description
+  if [[ -f "$history_file" ]] && command -v jq &>/dev/null; then
+    # Build a lookup of session descriptions from history
+    local descriptions
+    descriptions=$(jq -r --arg project "$main_worktree" \
+      'select(.project == $project) | [.sessionId, (.display // "no description")] | @tsv' \
+      "$history_file" 2>/dev/null | awk -F'\t' '!seen[$1]++ { print }')
+
+    for sid in "${session_ids[@]}"; do
+      local desc
+      desc=$(echo "$descriptions" | awk -F'\t' -v id="$sid" '$1 == id { print $2; exit }')
+      if [[ -n "$desc" ]]; then
+        # Truncate long descriptions
+        [[ ${#desc} -gt 80 ]] && desc="${desc:0:77}..."
+        printf '%s\t%s\n' "$sid" "$desc"
+      else
+        printf '%s\t%s\n' "$sid" "(no description)"
+      fi
+    done
   else
-    # Fallback: list .jsonl files
-    local f
-    for f in "$main_project_dir"/*.jsonl; do
-      [[ -f "$f" ]] || continue
-      local sid
-      sid="$(basename "$f" .jsonl)"
+    # Fallback: list .jsonl files without descriptions
+    for sid in "${session_ids[@]}"; do
       printf '%s\t%s\n' "$sid" "(no description)"
     done
   fi
@@ -632,29 +654,17 @@ cmd_claude_copy_session() {
     cp -r "$src_dir/$session_id" "$dst_dir/$session_id"
   fi
 
-  # Update target sessions-index.json
-  if command -v jq &>/dev/null && [[ -f "$src_dir/sessions-index.json" ]]; then
-    local entry
-    entry=$(jq --arg sid "$session_id" '.entries[]? | select(.sessionId == $sid)' "$src_dir/sessions-index.json" 2>/dev/null)
+  # Add entry to history.jsonl so Claude Code can discover the copied session
+  local history_file="$HOME/.claude/history.jsonl"
+  if command -v jq &>/dev/null && [[ -f "$history_file" ]]; then
+    # Get the first history entry for this session and rewrite project path
+    local history_entry
+    history_entry=$(jq -c --arg sid "$session_id" --arg project "$repo_root" \
+      'select(.sessionId == $sid) | .project = $project' \
+      "$history_file" 2>/dev/null | head -1)
 
-    if [[ -n "$entry" ]]; then
-      # Update fullPath (path to .jsonl file) and projectPath (project root)
-      entry=$(echo "$entry" | jq \
-        --arg fp "$dst_dir/$session_id.jsonl" \
-        --arg pp "$repo_root" \
-        '.fullPath = $fp | .projectPath = $pp')
-
-      if [[ -f "$dst_dir/sessions-index.json" ]]; then
-        # Append entry if not duplicate
-        local updated
-        updated=$(jq --arg sid "$session_id" --argjson entry "$entry" \
-          'if (.entries | map(.sessionId) | index($sid)) then . else .entries += [$entry] end' \
-          "$dst_dir/sessions-index.json" 2>/dev/null)
-        echo "$updated" > "$dst_dir/sessions-index.json"
-      else
-        # Create new index
-        jq -n --argjson entry "$entry" '{version: 1, entries: [$entry]}' > "$dst_dir/sessions-index.json"
-      fi
+    if [[ -n "$history_entry" ]]; then
+      echo "$history_entry" >> "$history_file"
     fi
   fi
 
