@@ -110,8 +110,16 @@ alias sbd="supabase stop"
 alias sbs="supabase status"
 alias hyprlock_restore="hyprctl --instance 0 'keyword misc:allow_session_lock_restore 1' && hyprctl --instance 0 'dispatch exec hyprlock'"
 
-alias vpython="venv/bin/python"
-alias vpip="venv/bin/pip"
+alias nrd="npm run dev"
+alias nrl="npm run lint"
+alias nrb="npm run build"
+alias nrbe="npm run build:extension"
+alias ngf="ngrok start fleetcraft"
+alias cb="cd backend"
+alias cf="cd frontend"
+alias ch="cd ~"
+alias gpc="gh pr create"
+alias gpv="gh pr view -w"
 
 # Path shortcuts
 cd_concat () {
