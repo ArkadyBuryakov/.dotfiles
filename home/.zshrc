@@ -110,6 +110,8 @@ alias sbd="supabase stop"
 alias sbs="supabase status"
 alias hyprlock_restore="hyprctl --instance 0 'keyword misc:allow_session_lock_restore 1' && hyprctl --instance 0 'dispatch exec hyprlock'"
 
+alias us="uv sync"
+alias ni="npm install"
 alias nrd="npm run dev"
 alias nrl="npm run lint"
 alias nrb="npm run build"
