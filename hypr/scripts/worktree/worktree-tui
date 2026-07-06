@@ -382,8 +382,14 @@ main() {
                     fi
                 else
                     if [[ -n "$selection" ]]; then
-                        execute_action "$mode" "$selection" "$current_opener"
+                        execute_action "$mode" "$selection" "$current_opener" || true
                     fi
+                fi
+
+                # Stay in the TUI after a delete so several worktrees can be
+                # removed in one session; all other modes exit.
+                if [[ "$mode" == "delete" ]]; then
+                    continue
                 fi
                 exit 0
                 ;;
