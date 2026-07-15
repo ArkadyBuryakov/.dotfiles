@@ -37,12 +37,19 @@ _worktree_claude_sessions() {
     _describe -t sessions 'session' sessions
 }
 
+_worktree_run_commands() {
+    local run_commands
+    run_commands=(${(f)"$(worktree --complete run 2>/dev/null)"})
+    _describe -t run_commands 'command' run_commands
+}
+
 _worktree_commands() {
     local commands=(
         'create:Create or open worktree for a branch'
         'open:Open worktree with a command'
         'delete:Delete worktree (asks if uncommitted changes)'
         'checkout:Delete worktree and checkout branch in main repo'
+        'run:Run a named command from .vscode/worktrees.json'
         'claude:Claude session management'
     )
     _describe -t commands 'command' commands
@@ -79,6 +86,10 @@ _worktree() {
                 delete|checkout)
                     _arguments \
                         '1:worktree:_worktree_names'
+                    ;;
+                run)
+                    _arguments \
+                        '1:command:_worktree_run_commands'
                     ;;
                 claude)
                     _arguments -C \

@@ -191,3 +191,8 @@ alias wto="worktree open"
 alias wtco="worktree checkout"
 alias wtd="worktree delete"
 alias wtt="worktree-tui"
+alias wtr="worktree run"
+alias wtrb="worktree run backend"
+alias wtrf="worktree run frontend"
+alias wtrn="worktree run ngrok"
+

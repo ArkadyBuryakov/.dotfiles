@@ -153,6 +153,205 @@ find_branch_worktree() {
     '
 }
 
+# Create symlinks in a new worktree based on the main repo's
+# .vscode/worktrees.json config ("symlinks": [paths relative to repo root]).
+# Each listed file/folder is symlinked from the main repo into the worktree.
+create_worktree_symlinks() {
+  local worktree_path="$1"
+  local main_worktree config
+
+  main_worktree="$(get_main_worktree)"
+  [[ -z "$main_worktree" ]] && return 0
+
+  config="$main_worktree/.vscode/worktrees.json"
+  [[ -f "$config" ]] || return 0
+
+  if ! command -v jq &>/dev/null; then
+    warn "jq not found; skipping symlink creation from $config"
+    return 0
+  fi
+
+  local -a symlinks=()
+  local rel
+  while IFS= read -r rel; do
+    [[ -n "$rel" ]] && symlinks+=("$rel")
+  done < <(jq -r '.symlinks[]? // empty' "$config" 2>/dev/null)
+
+  [[ ${#symlinks[@]} -eq 0 ]] && return 0
+
+  local -a created=()
+  for rel in "${symlinks[@]}"; do
+    # Strip any leading/trailing slashes to keep paths relative and clean
+    rel="${rel#/}"
+    rel="${rel%/}"
+    [[ -z "$rel" ]] && continue
+
+    local src="$main_worktree/$rel"
+    local dst="$worktree_path/$rel"
+
+    if [[ ! -e "$src" ]]; then
+      warn "Symlink source does not exist, skipping: $src"
+      continue
+    fi
+
+    # If a real file/dir already exists at the destination, don't clobber it
+    if [[ -e "$dst" && ! -L "$dst" ]]; then
+      warn "Destination already exists (not a symlink), skipping: $dst"
+      continue
+    fi
+
+    mkdir -p "$(dirname "$dst")"
+    ln -sfn "$src" "$dst"
+    success "Symlinked $rel -> $src"
+    created+=("$rel")
+  done
+
+  # Hide the symlinks from git status/diff. A .gitignore pattern like "dir/"
+  # matches directories only, not the symlink git sees, so the link would show
+  # up as untracked. We add anchored ignore entries scoped to THIS worktree
+  # only, via a per-worktree core.excludesFile (extensions.worktreeConfig).
+  [[ ${#created[@]} -eq 0 ]] && return 0
+  exclude_worktree_symlinks "$worktree_path" "${created[@]}"
+}
+
+# Configure a per-worktree ignore file so the given root-relative paths are
+# hidden from git status/diff in this worktree ONLY (not the main repo or
+# sibling worktrees). Uses a per-worktree core.excludesFile, seeded with the
+# user's global excludes so those are not lost by the override.
+exclude_worktree_symlinks() {
+  local worktree_path="$1"
+  shift
+  local -a paths=("$@")
+
+  local git_dir exclude_file
+  git_dir="$(git -C "$worktree_path" rev-parse --git-dir 2>/dev/null)" || return 0
+  # $GIT_DIR is per-worktree (.git/worktrees/<name>), so this file is private
+  # to this worktree even though info/exclude itself is shared.
+  exclude_file="$git_dir/worktree-symlinks.exclude"
+
+  # Enable per-worktree config and point this worktree's excludesFile at our file.
+  git -C "$worktree_path" config extensions.worktreeConfig true 2>/dev/null || return 0
+  git -C "$worktree_path" config --worktree core.excludesFile "$exclude_file" 2>/dev/null || return 0
+
+  # Seed with the user's global excludes so overriding core.excludesFile here
+  # doesn't drop their personal ignores. (.gitignore and info/exclude still apply.)
+  local global_excludes
+  global_excludes="$(git config --global --get core.excludesFile 2>/dev/null || true)"
+  [[ -z "$global_excludes" ]] && global_excludes="${XDG_CONFIG_HOME:-$HOME/.config}/git/ignore"
+  global_excludes="${global_excludes/#\~/$HOME}"
+
+  {
+    echo "# Managed by worktree tool: symlinks from .vscode/worktrees.json"
+    if [[ -f "$global_excludes" ]]; then
+      echo "# --- inherited from global core.excludesFile: $global_excludes ---"
+      cat "$global_excludes"
+      echo "# --- worktree symlinks ---"
+    fi
+    local rel
+    for rel in "${paths[@]}"; do
+      echo "/$rel"
+    done
+  } > "$exclude_file"
+
+  success "Excluded ${#paths[@]} symlink(s) from git in this worktree"
+}
+
+# Run setup scripts in a new worktree based on the main repo's
+# .vscode/worktrees.json config ("setup_scripts": [bash scripts]).
+# Each script is run from the root of the worktree.
+run_worktree_scripts() {
+  local worktree_path="$1"
+  local main_worktree config
+
+  main_worktree="$(get_main_worktree)"
+  [[ -z "$main_worktree" ]] && return 0
+
+  config="$main_worktree/.vscode/worktrees.json"
+  [[ -f "$config" ]] || return 0
+
+  if ! command -v jq &>/dev/null; then
+    warn "jq not found; skipping setup scripts from $config"
+    return 0
+  fi
+
+  local -a scripts=()
+  local script
+  while IFS= read -r script; do
+    [[ -n "$script" ]] && scripts+=("$script")
+  done < <(jq -r '.setup_scripts[]? // empty' "$config" 2>/dev/null)
+
+  [[ ${#scripts[@]} -eq 0 ]] && return 0
+
+  local worktrees_dir
+  worktrees_dir="$(get_worktrees_dir "$main_worktree")"
+
+  for script in "${scripts[@]}"; do
+    success "Running setup script: $script"
+    if ! ( cd "$worktree_path" \
+      && ROOT_TREE_PATH="$main_worktree" WORK_TREE_PATH="$worktree_path" \
+        WORKTREES_DIR="$worktrees_dir" \
+        bash -c "$script" ) >&2; then
+      warn "Setup script failed: $script"
+    fi
+  done
+}
+
+# Command: run [COMMAND_NAME]
+# Resolves a named command from .vscode/worktrees.json ("scripts": {name: cmd})
+# in the main repo and runs it from the current worktree root. The main repo
+# and current worktree paths are exposed as ROOT_TREE_PATH / WORK_TREE_PATH.
+cmd_run() {
+  local command_name="${1:-}"
+  local repo_root main_worktree config cmd
+
+  if [[ -z "$command_name" ]]; then
+    error "Command name required"
+    return 1
+  fi
+
+  repo_root="$(get_repo_root)" || return 1
+
+  main_worktree="$(get_main_worktree)"
+  [[ -z "$main_worktree" ]] && main_worktree="$repo_root"
+
+  config="$main_worktree/.vscode/worktrees.json"
+  if [[ ! -f "$config" ]]; then
+    error "Config not found: $config"
+    return 1
+  fi
+
+  if ! command -v jq &>/dev/null; then
+    error "jq is required to run named commands"
+    return 1
+  fi
+
+  cmd="$(jq -r --arg name "$command_name" '.scripts[$name] // empty' "$config" 2>/dev/null)"
+  if [[ -z "$cmd" ]]; then
+    error "No script named '$command_name' in $config"
+    return 1
+  fi
+
+  local worktrees_dir
+  worktrees_dir="$(get_worktrees_dir "$main_worktree")"
+
+  success "Running '$command_name' from $repo_root"
+  ( cd "$repo_root" \
+    && ROOT_TREE_PATH="$main_worktree" WORK_TREE_PATH="$repo_root" \
+      WORKTREES_DIR="$worktrees_dir" \
+      bash -c "$cmd" )
+}
+
+# List named commands from the config (for completion)
+get_run_commands() {
+  local main_worktree config
+  main_worktree="$(get_main_worktree)"
+  [[ -z "$main_worktree" ]] && return 0
+  config="$main_worktree/.vscode/worktrees.json"
+  [[ -f "$config" ]] || return 0
+  command -v jq &>/dev/null || return 0
+  jq -r '.scripts // {} | keys[]' "$config" 2>/dev/null
+}
+
 # Command: create [BRANCH_NAME] [-o COMMAND] [-p PATH]
 cmd_create() {
   local branch_name=""
@@ -229,6 +428,8 @@ cmd_create() {
         git worktree add -b "$branch_name" "$worktree_path" >&2
       fi
       success "Created worktree for '$branch_name' at $worktree_path"
+      create_worktree_symlinks "$worktree_path"
+      run_worktree_scripts "$worktree_path"
     fi
   fi
 
@@ -682,6 +883,9 @@ generate_completions() {
   claude)
     is_non_main_worktree && get_claude_sessions_filtered
     ;;
+  run)
+    get_run_commands
+    ;;
   open | delete | checkout | *)
     get_worktrees
     ;;
@@ -709,6 +913,10 @@ main() {
     shift
     cmd_checkout "$@"
     ;;
+  run)
+    shift
+    cmd_run "$@"
+    ;;
   claude)
     shift
     local subcmd="${1:-}"
@@ -735,12 +943,19 @@ Usage:
     worktree open [NAME] [-o CMD] [-p PATH]      Open existing worktree with command
     worktree delete [NAME]                       Delete worktree (asks if uncommitted changes)
     worktree checkout [NAME]                     Delete worktree and checkout branch in main repo
+    worktree run [COMMAND_NAME]                  Run a named command from .vscode/worktrees.json
     worktree claude copy-session [ID]            Copy Claude session from main worktree
     worktree [CMD] [NAME] [-p PATH]              Shortcut for: worktree open -o CMD
 
 Options:
     -o COMMAND    Command to run (default: \$EDITOR or vim)
     -p PATH       Relative path within worktree
+
+Named commands (worktree run):
+    Resolved from "scripts": {NAME: CMD} in the main repo's
+    .vscode/worktrees.json, run from the current worktree root.
+    Exposes ROOT_TREE_PATH (main repo), WORK_TREE_PATH (current worktree)
+    and WORKTREES_DIR (worktrees base directory).
 
 Examples:
     eval "\$(worktree create feature/new-thing)"
@@ -749,6 +964,7 @@ Examples:
     eval "\$(worktree code feature)"
     worktree delete feature
     eval "\$(worktree checkout feature)"
+    worktree run migrate
 
 Note: Use with 'eval' to change directory in current shell.
 
