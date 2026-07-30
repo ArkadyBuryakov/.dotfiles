@@ -189,17 +189,36 @@ return {
         end)
       end
 
-      local function run_export(query, psql_flags)
+      -- Return the active connection URL, or error if none.
+      local function db_url()
         local url = vim.b.db
         if not url then
           error("No database connection. Use :DBUIFindBuffer to connect first.")
         end
-        local cmd = vim.list_extend({ "psql", url }, psql_flags)
-        table.insert(cmd, "-c")
-        table.insert(cmd, query)
-        local result = vim.fn.system(cmd)
+        return url
+      end
+
+      -- Identify the backend from a dadbod connection URL.
+      local function db_kind(url)
+        if url:match("^postgres") then
+          return "postgres"
+        elseif url:match("^duckdb:") then
+          return "duckdb"
+        end
+        return nil
+      end
+
+      -- Extract the database file path from a duckdb: URL (mirrors db#url#file_path).
+      local function duckdb_path(url)
+        return (url:gsub("^duckdb:", ""):gsub("[?#].*$", ""))
+      end
+
+      -- Run a command (list form), optionally feeding stdin; return stdout with a
+      -- single trailing newline trimmed. Errors on non-zero exit.
+      local function run(cmd, stdin)
+        local result = vim.fn.system(cmd, stdin)
         if vim.v.shell_error ~= 0 then
-          error("psql error: " .. result)
+          error(cmd[1] .. " error: " .. result)
         end
         if result:sub(-1) == "\n" then
           result = result:sub(1, -2)
@@ -207,16 +226,40 @@ return {
         return result
       end
 
-      local function export_to_buffer(query, psql_flags, ft)
-        local result = run_export(query, psql_flags)
+      -- Export the given inner query as CSV (with header) for the active backend.
+      local function export_csv(text)
+        local url = db_url()
+        local kind = db_kind(url)
+        if kind == "postgres" then
+          return run({ "psql", url, "-c", "COPY (" .. text .. ") TO STDOUT WITH (FORMAT CSV, HEADER)" })
+        elseif kind == "duckdb" then
+          return run({ "duckdb", duckdb_path(url), "-c", "COPY (" .. text .. ") TO '/dev/stdout' (FORMAT CSV, HEADER)" })
+        end
+        error("CSV export not supported for this connection: " .. url)
+      end
+
+      -- Export the given inner query as pretty JSON for the active backend.
+      -- A single-row result is unwrapped to a bare object to match psql behavior.
+      local function export_json(text)
+        local url = db_url()
+        local kind = db_kind(url)
+        if kind == "postgres" then
+          return run({ "psql", url, "--quiet", "-t", "-A", "-c", json_query(text) })
+        elseif kind == "duckdb" then
+          local raw = run({ "duckdb", duckdb_path(url), "-c", "COPY (" .. text .. ") TO '/dev/stdout' (FORMAT JSON, ARRAY true)" })
+          return run({ "jq", "if length == 1 then .[0] else . end" }, raw)
+        end
+        error("JSON export not supported for this connection: " .. url)
+      end
+
+      local function export_to_buffer(result, ft)
         vim.cmd("enew")
         vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(result, "\n"))
         vim.bo.buftype = "nofile"
         vim.bo.filetype = ft
       end
 
-      local function export_to_clipboard(query, psql_flags)
-        local result = run_export(query, psql_flags)
+      local function export_to_clipboard(result)
         vim.fn.setreg('"', result)
         vim.fn.setreg('+', result)
         vim.notify("Copied to clipboard", vim.log.levels.INFO)
@@ -225,15 +268,14 @@ return {
       function ExportCurrentSqlCsv()
         FindCurrentSql(function(node)
           local text = strip_semicolon(vim.treesitter.get_node_text(node, 0))
-          export_to_buffer("COPY (" .. text .. ") TO STDOUT WITH (FORMAT CSV, HEADER)", {}, "csv")
+          export_to_buffer(export_csv(text), "csv")
         end)
       end
 
       function ExportCurrentSqlJson()
         FindCurrentSql(function(node)
           local text = strip_semicolon(vim.treesitter.get_node_text(node, 0))
-          local query = json_query(text)
-          export_to_buffer(query, { "--quiet", "-t", "-A" }, "json")
+          export_to_buffer(export_json(text), "json")
         end)
       end
 
@@ -244,39 +286,36 @@ return {
 
       function ExportSelectedSqlCsv()
         local text = strip_semicolon(get_visual_selection())
-        export_query("COPY (" .. text .. ") TO STDOUT WITH (FORMAT CSV, HEADER)", {}, "csv")
+        export_to_buffer(export_csv(text), "csv")
       end
 
       function ExportSelectedSqlJson()
         local text = strip_semicolon(get_visual_selection())
-        local query = json_query(text)
-        export_to_buffer(query, { "--quiet", "-t", "-A" }, "json")
+        export_to_buffer(export_json(text), "json")
       end
 
       function YankCurrentSqlCsv()
         FindCurrentSql(function(node)
           local text = strip_semicolon(vim.treesitter.get_node_text(node, 0))
-          export_to_clipboard("COPY (" .. text .. ") TO STDOUT WITH (FORMAT CSV, HEADER)", {})
+          export_to_clipboard(export_csv(text))
         end)
       end
 
       function YankCurrentSqlJson()
         FindCurrentSql(function(node)
           local text = strip_semicolon(vim.treesitter.get_node_text(node, 0))
-          local query = json_query(text)
-          export_to_clipboard(query, { "--quiet", "-t", "-A" })
+          export_to_clipboard(export_json(text))
         end)
       end
 
       function YankSelectedSqlCsv()
         local text = strip_semicolon(get_visual_selection())
-        export_to_clipboard("COPY (" .. text .. ") TO STDOUT WITH (FORMAT CSV, HEADER)", {})
+        export_to_clipboard(export_csv(text))
       end
 
       function YankSelectedSqlJson()
         local text = strip_semicolon(get_visual_selection())
-        local query = json_query(text)
-        export_to_clipboard(query, { "--quiet", "-t", "-A" })
+        export_to_clipboard(export_json(text))
       end
 
       function ConnectBuffer()
