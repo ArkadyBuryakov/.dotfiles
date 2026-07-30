@@ -24,13 +24,23 @@ scan() {
   local kpid tree hypr
   for kpid in $kitty_pids; do
     tree=$(kitten @ --to "unix:@mykitty-$kpid" ls 2>/dev/null) || continue
+    # All hyprland clients of this instance, most recently focused first.
+    # A kitty instance can own several os windows (same pid); they are paired
+    # with hyprland clients below by matching focus-recency rank, since kitty
+    # last_focused_at and hyprland focusHistoryID track the same focus events.
     hypr=$(jq -c --argjson pid "$kpid" \
-      '[.[] | select(.class == "kitty" and .pid == $pid)][0]
-       | {workspace: .workspace.name, workspace_id: .workspace.id, hypr_address: .address}' \
+      '[.[] | select(.class == "kitty" and .pid == $pid)]
+       | sort_by(.focusHistoryID)
+       | map({workspace: .workspace.name, workspace_id: .workspace.id, hypr_address: .address})' \
       <<<"$clients")
     agents+=$(jq -c --argjson kpid "$kpid" --argjson hypr "$hypr" \
       --arg agent_re "$AGENT_RE" --arg wrapper_re "$WRAPPER_RE" '
-      .[] as $osw | $osw.tabs[] as $tab | $tab.windows[] as $w
+      (map({id, recency: ([.tabs[].windows[].last_focused_at // 0] | max // 0)})
+       | sort_by(-.recency) | map(.id)) as $osw_rank
+      | .[] as $osw
+      | (($osw_rank | index($osw.id)) // 0) as $rank
+      | ($hypr[$rank] // $hypr[0] // {}) as $loc
+      | $osw.tabs[] as $tab | $tab.windows[] as $w
       | ($w.foreground_processes // [])[] as $fp
       | ($fp.cmdline // []) as $cmd
       | (($cmd[0] // "") | split("/") | last) as $base
@@ -38,7 +48,7 @@ scan() {
          then (($cmd[1] // "") | split("/") | last)
          else $base end) as $name
       | select($name | test($agent_re))
-      | $hypr + {
+      | $loc + {
           agent: $name,
           agent_pid: $fp.pid,
           cwd: $fp.cwd,

@@ -20,5 +20,16 @@ fi
 
 workspace=$((workspace + target_monitor * 10))
 
-# Build and execute the hyprctl command
-hyprctl dispatch $dispatcher $workspace
+# Build and execute the hyprctl command (lua config expects hl.dsp expressions)
+case "$dispatcher" in
+workspace)
+  hyprctl dispatch "hl.dsp.focus({ workspace = $workspace })"
+  ;;
+movetoworkspace)
+  hyprctl dispatch "hl.dsp.window.move({ workspace = $workspace, follow = true })"
+  ;;
+*)
+  echo "Unsupported dispatcher: $dispatcher" >&2
+  exit 1
+  ;;
+esac
