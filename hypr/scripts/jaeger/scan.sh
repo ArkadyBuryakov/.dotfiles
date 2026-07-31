@@ -60,9 +60,34 @@ scan() {
                    else "unknown" end),
           kitty_pid: $kpid,
           kitty_win_id: $w.id,
-          tab_id: $tab.id
+          tab_id: $tab.id,
+          focused: (($osw.is_focused == true) and ($w.is_focused == true))
         }' <<<"$tree")$'\n'
   done
+
+  # kitty transiently reports an empty foreground_processes for a window whose
+  # agent is mid-work (fg process group unreadable during child spawn/reap),
+  # and `kitten @ ls` itself can fail for a cycle — either way the card would
+  # flicker. Keep an agent from the previous scan as long as its process is
+  # still alive and not suspended (ctrl-z).
+  local prev pid name state cmd base0 base1
+  prev=$(jq -c --argjson cur "$(jq -sc 'map(.agent_pid)' <<<"$agents")" \
+    '.[] | select((.agent_pid as $p | $cur | index($p)) | not)' \
+    "$STATUS_DIR/agents.json" 2>/dev/null)
+  local a
+  while IFS= read -r a; do
+    [ -z "$a" ] && continue
+    pid=$(jq -r '.agent_pid' <<<"$a")
+    name=$(jq -r '.agent' <<<"$a")
+    [ -d "/proc/$pid" ] || continue
+    state=$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | cut -d' ' -f1)
+    [ "$state" = "T" ] && continue
+    mapfile -t cmd < <(tr '\0' '\n' <"/proc/$pid/cmdline" 2>/dev/null)
+    base0=${cmd[0]##*/}
+    base1=${cmd[1]:+${cmd[1]##*/}}
+    [ "$base0" = "$name" ] || [ "$base1" = "$name" ] || continue
+    agents+="$a"$'\n'
+  done <<<"$prev"
 
   # Drop state files of agents that no longer exist (pid-named files only)
   local f

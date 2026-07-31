@@ -3,7 +3,8 @@
 Side panel for Hyprland showing AI agents (Claude Code, codex, aider, …)
 running across all kitty OS windows: project, git branch, live status, current
 task and workspace. Click a card to jump to the agent — workspace, kitty OS
-window, tab and window.
+window, tab and window. The agent whose terminal window currently has focus
+gets a highlighted border.
 
 Named after the mechs from Pacific Rim: you drift with your agents.
 
@@ -19,7 +20,11 @@ Named after the mechs from Pacific Rim: you drift with your agents.
   tab/window; `focus_on_activate` makes Hyprland follow.
 - `shell.qml` — Quickshell panel: polls `scan.sh` every 1.5 s and rescans
   instantly on Hyprland window/workspace events.
-- `jaeger.sh [start|stop|toggle]` — launcher.
+- `jaeger.sh [start|stop|all|one|toggle]` — launcher. `all` toggles panels on
+  every monitor; `one` toggles a single panel on the focused monitor (hidden →
+  open here, open elsewhere → move here, open here → close). In one-mode the
+  panel follows focus if its monitor is unplugged, and closes if no monitors
+  remain. `toggle` is an alias for `all`.
 - `claude-hook.sh` — optional Claude Code hook for precise status
   (adds a "waiting for input" state that title parsing can't detect).
 
@@ -33,7 +38,8 @@ Hyprland config:
 
 ```conf
 exec-once = ~/.config/hypr/scripts/jaeger/jaeger.sh start
-bind = $mainMod, A, exec, ~/.config/hypr/scripts/jaeger/jaeger.sh toggle
+bind = $mainMod, Tab, exec, ~/.config/hypr/scripts/jaeger/jaeger.sh one
+bind = $mainMod SHIFT, Tab, exec, ~/.config/hypr/scripts/jaeger/jaeger.sh all
 ```
 
 ## Optional: precise status via Claude Code hooks

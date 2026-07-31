@@ -17,6 +17,9 @@ ShellRoot {
 
     property var agents: []
     property bool shown: true
+    // "all": panel on every monitor; "one": only on oneMonitor
+    property string mode: Quickshell.env("JAEGER_MODE") === "one" ? "one" : "all"
+    property string oneMonitor: Quickshell.env("JAEGER_MONITOR") || ""
     readonly property string dir: Quickshell.env("HOME") + "/.config/hypr/scripts/jaeger"
 
     readonly property string fontFamily: "JetBrainsMono Nerd Font"
@@ -74,6 +77,7 @@ ShellRoot {
             switch (event.name) {
             case "openwindow":
             case "closewindow":
+            case "activewindowv2":
             case "movewindowv2":
             case "workspacev2":
             case "activespecialv2":
@@ -87,10 +91,48 @@ ShellRoot {
         onTriggered: root.rescan()
     }
 
+    function screenExists(name) {
+        return Quickshell.screens.some(s => s.name === name);
+    }
+
+    // Keep the one-mode panel on a live monitor: if its monitor is unplugged,
+    // follow focus; if no monitors remain, close.
+    Connections {
+        target: Quickshell
+        function onScreensChanged() {
+            if (root.mode !== "one" || !root.shown) return;
+            if (Quickshell.screens.length === 0) {
+                root.shown = false;
+                return;
+            }
+            if (!root.screenExists(root.oneMonitor)) {
+                const focused = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
+                root.oneMonitor = root.screenExists(focused) ? focused : Quickshell.screens[0].name;
+            }
+        }
+    }
+
     IpcHandler {
         target: "jaeger"
         function toggle(): void {
-            root.shown = !root.shown;
+            toggleAll();
+        }
+        function toggleAll(): void {
+            if (root.shown && root.mode === "all") {
+                root.shown = false;
+            } else {
+                root.mode = "all";
+                root.shown = true;
+            }
+        }
+        function toggleOne(monitor: string): void {
+            if (root.shown && root.mode === "one" && root.oneMonitor === monitor) {
+                root.shown = false;
+            } else {
+                root.mode = "one";
+                root.oneMonitor = monitor;
+                root.shown = true;
+            }
         }
     }
 
@@ -100,7 +142,7 @@ ShellRoot {
         PanelWindow {
             required property var modelData
             screen: modelData
-            visible: root.shown
+            visible: root.shown && (root.mode === "all" || modelData.name === root.oneMonitor)
 
             anchors {
                 top: true
@@ -129,7 +171,7 @@ ShellRoot {
                     RowLayout {
                         Layout.fillWidth: true
                         Text {
-                            text: "JAEGER"
+                            text: "󱢗 JAEGER"
                             color: root.fgSecondary
                             font.family: root.fontFamily
                             font.pixelSize: root.fontSize
@@ -171,7 +213,7 @@ ShellRoot {
                             height: cardContent.implicitHeight + 16
                             radius: 0
                             color: root.bg
-                            border.color: hover.hovered ? root.borderActive : root.borderInactive
+                            border.color: (hover.hovered || card.modelData.focused) ? root.borderActive : root.borderInactive
                             border.width: 2
 
                             HoverHandler {

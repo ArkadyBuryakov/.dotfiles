@@ -44,7 +44,8 @@ bindp(mainMod .. " + SHIFT + N", hl.dsp.exec_cmd('~/.config/hypr/scripts/toggle_
 bindp(mainMod .. " + ALT + N", hl.dsp.exec_cmd('~/.config/hypr/scripts/toggle_vpn.sh "Personal RU"'))
 bindp(mainMod .. " + D", hl.dsp.exec_cmd("~/.config/hypr/scripts/toggle_dnd.sh"))
 bindp(mainMod .. " + SHIFT + D", hl.dsp.exec_cmd("makoctl dismiss -a"))
-bindp(mainMod .. " + Tab", hl.dsp.exec_cmd("~/.config/hypr/scripts/jaeger/jaeger.sh toggle"))
+bindp(mainMod .. " + Tab", hl.dsp.exec_cmd("~/.config/hypr/scripts/jaeger/jaeger.sh one"))
+bindp(mainMod .. " + SHIFT + Tab", hl.dsp.exec_cmd("~/.config/hypr/scripts/jaeger/jaeger.sh all"))
 for i = 1, 9 do
 	bindp(mainMod .. " + ALT + " .. i, hl.dsp.exec_cmd("~/.config/hypr/scripts/jaeger/goto.sh " .. i))
 end
