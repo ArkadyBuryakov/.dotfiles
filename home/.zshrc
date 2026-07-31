@@ -193,6 +193,7 @@ alias wtd="worktree delete"
 alias wtt="worktree-tui"
 alias wtr="worktree run"
 alias wtrb="worktree run backend"
+alias wtrc="worktree run client"
 alias wtrf="worktree run frontend"
 alias wtrn="worktree run ngrok"
 
