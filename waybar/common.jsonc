@@ -1,0 +1,149 @@
+// Shared bar configuration, included by both per-output bars in `config`.
+// In waybar's include merge the including bar's keys win, so anything
+// per-output (currently only ext/workspaces) is defined in `config` instead.
+{
+  "layer": "top",
+  "position": "top",
+  "spacing": 0,
+  "height": 30,
+  "modules-left": [
+    "ext/workspaces"
+  ],
+  "modules-center": [
+    // "custom/anki",
+    "clock"
+  ],
+  "modules-right": [
+    "custom/dnd",
+    "custom/clamav",
+    "hyprland/language",
+    "cpu",
+    "memory",
+    "wireplumber",
+    "network",
+    "bluetooth",
+    "battery",
+    "custom/power"
+  ],
+  "cpu": {
+    "interval": 5,
+    "format": " {usage}%",
+    "max-length": 10,
+    "on-click": "kitty btop"
+  },
+  "memory": {
+    "interval": 5,
+    "format": " {}%",
+    "max-length": 10,
+    "on-click": "kitty btop"
+  },
+  "clock": {
+    "tooltip": true,
+    "tooltip-format": "<small>{calendar}</small>",
+    "format": "  {:%H:%M    %a, %d %b %Y}",
+  },
+  "hyprland/language": {
+    "format": "{shortDescription}",
+    "keyboard-name": "at-translated-set-2-keyboard",
+    "on-click": "~/.config/hypr/scripts/switch-kb-layout.sh"
+  },
+  "network": {
+    "format-wifi": "{icon}",
+    "format-icons": [
+      "󰤯",
+      "󰤟",
+      "󰤢",
+      "󰤥",
+      "󰖩"
+    ],
+    "format-ethernet": "󰀂",
+    // "format-alt" : "󱛇",
+    "format-disconnected": "󰖪",
+    "tooltip-format-wifi": "{icon} {essid}\n⇣{bandwidthDownBytes}  ⇡{bandwidthUpBytes}",
+    "tooltip-format-ethernet": "󰀂  {ifname}\n⇣{bandwidthDownBytes}  ⇡{bandwidthUpBytes}",
+    "tooltip-format-disconnected": "Disconnected",
+    "on-click": "nmcli device wifi rescan && kitty ~/.config/hypr/scripts/nm-tui-delay.sh",
+    "on-click-right": "nmcli device wifi rescan",
+    "interval": 5,
+    "nospacing": 1,
+  },
+  "battery": {
+    "format": "{icon}",
+    "format-icons": {
+      "charging": [
+        "󰢜",
+        "󰂆",
+        "󰂇",
+        "󰂈",
+        "󰢝",
+        "󰂉",
+        "󰢞",
+        "󰂊",
+        "󰂋",
+        "󰂅"
+      ],
+      "default": [
+        "󰁺",
+        "󰁻",
+        "󰁼",
+        "󰁽",
+        "󰁾",
+        "󰁿",
+        "󰂀",
+        "󰂁",
+        "󰂂",
+        "󰁹"
+      ]
+    },
+    "format-full": "󰁹",
+    "interval": 5,
+    "states": {
+      "warning": 20,
+      "critical": 10
+    },
+    "tooltip-format": "{capacity}%"
+  },
+  "custom/power": {
+    "format": "󰤆",
+    "tooltip": false,
+    "on-click": "wlogout"
+  },
+  "wireplumber": {
+    "format": "{icon}",
+    "format-muted": " ",
+    "on-click": "wpctl set-mute @DEFAULT_SINK@ toggle",
+    "format-icons": [
+      " ",
+      " ",
+      " "
+    ],
+    "tooltip-format": "{volume} %"
+  },
+  "custom/anki": {
+    "exec": "~/.config/waybar/scripts/anki-status.sh",
+    "return-type": "json",
+    "interval": 300,
+    "on-click": "anki"
+  },
+  "custom/dnd": {
+    "exec": "makoctl mode | grep -q do-not-disturb && echo '{\"text\": \"󰂛\", \"class\": \"active\", \"tooltip\": \"Do not disturb: ON\"}' || echo '{\"text\": \"\", \"class\": \"\", \"tooltip\": \"\"}'",
+    "return-type": "json",
+    "interval": 1,
+    "on-click": "~/.config/hypr/scripts/toggle_dnd.sh"
+  },
+  "custom/clamav": {
+    "exec": "~/.config/waybar/scripts/clamav-status.sh",
+    "return-type": "json",
+    "interval": 1,
+    "on-click": "kitty -T Antivirus /etc/clamav/threat-manager.sh"
+  },
+  "bluetooth": {
+    "on-click": "kitty bluetuith",
+    "on-click-right": "bluetoothctl -- connect 44:73:D6:A5:28:10",
+    "format": "󰂯",
+    "format-off": "󰂲",
+    "format-connected": "󰂱",
+    "tooltip-format-enumerate-connected": "{device_alias}",
+    "tooltip-format": "{device_enumerate}"
+  },
+}

@@ -1,194 +1,47 @@
-{
-  "layer": "top",
-  "position": "top",
-  "spacing": 0,
-  "height": 30,
-  "modules-left": [
-    "hyprland/workspaces"
-  ],
-  "modules-center": [
-    // "custom/anki",
-    "clock"
-  ],
-  "modules-right": [
-    "custom/dnd",
-    "custom/clamav",
-    "hyprland/language",
-    "cpu",
-    "memory",
-    "wireplumber",
-    "network",
-    "bluetooth",
-    "battery",
-    "custom/power"
-  ],
-  "hyprland/workspaces": {
-    "on-click": "activate",
-    "format": "{icon}",
-    "format-icons": {
-      "1": "1",
-      "2": "2",
-      "3": "3",
-      "4": "4",
-      "5": "5",
-      "6": "6",
-      "7": "7",
-      "8": "8",
-      "9": "9",
-      "11": "1",
-      "12": "2",
-      "13": "3",
-      "14": "4",
-      "15": "5",
-      "16": "6",
-      "17": "7",
-      "18": "8",
-      "19": "9",
-    },
-    "persistent-workspaces": {
-      "eDP-1": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9
-      ],
-      "DP-1": [
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17,
-        18,
-        19
-      ],
+// Two bars, one per output, sharing common.jsonc. They differ only in the
+// workspaces module: the external monitor presents its workspaces 11-19 as
+// 1-9, while the laptop bar shows real names — so when DP-1 is disconnected
+// and occupied 11-19 workspaces migrate to eDP-1, they are distinguishable
+// from the native 1-9.
+//
+// ext/workspaces (ext-workspace-v1 protocol) instead of hyprland/workspaces:
+// the hyprland module dispatches classic IPC syntax, which the lua-based
+// hyprland config no longer accepts, so clicks silently failed. Workspaces
+// 1-9/11-19 are kept persistent compositor-side in hypr/conf/workspaces.lua.
+//
+// Sorting: Hyprland sends the numeric workspace id via the coordinates event
+// (it never sends workspace_id, and name-sorting falls back to lexicographic
+// because special:* names are non-numeric).
+[
+  {
+    "output": "eDP-1",
+    "include": "~/.config/waybar/common.jsonc",
+    "ext/workspaces": {
+      "on-click": "activate",
+      "sort-by-name": false,
+      "sort-by-coordinates": true,
+      "format": "{name}"
     }
   },
-  "cpu": {
-    "interval": 5,
-    "format": " {usage}%",
-    "max-length": 10,
-    "on-click": "kitty btop"
-  },
-  "memory": {
-    "interval": 5,
-    "format": " {}%",
-    "max-length": 10,
-    "on-click": "kitty btop"
-  },
-  "clock": {
-    "tooltip": true,
-    "tooltip-format": "<small>{calendar}</small>",
-    "format": "  {:%H:%M    %a, %d %b %Y}",
-  },
-  "hyprland/language": {
-    "format": "{shortDescription}",
-    "keyboard-name": "at-translated-set-2-keyboard",
-    "on-click": "~/.config/hypr/scripts/switch-kb-layout.sh"
-  },
-  "network": {
-    "format-wifi": "{icon}",
-    "format-icons": [
-      "󰤯",
-      "󰤟",
-      "󰤢",
-      "󰤥",
-      "󰖩"
-    ],
-    "format-ethernet": "󰀂",
-    // "format-alt" : "󱛇",
-    "format-disconnected": "󰖪",
-    "tooltip-format-wifi": "{icon} {essid}\n⇣{bandwidthDownBytes}  ⇡{bandwidthUpBytes}",
-    "tooltip-format-ethernet": "󰀂  {ifname}\n⇣{bandwidthDownBytes}  ⇡{bandwidthUpBytes}",
-    "tooltip-format-disconnected": "Disconnected",
-    "on-click": "nmcli device wifi rescan && kitty ~/.config/hypr/scripts/nm-tui-delay.sh",
-    "on-click-right": "nmcli device wifi rescan",
-    "interval": 5,
-    "nospacing": 1,
-  },
-  "battery": {
-    "format": "{icon}",
-    "format-icons": {
-      "charging": [
-        "󰢜",
-        "󰂆",
-        "󰂇",
-        "󰂈",
-        "󰢝",
-        "󰂉",
-        "󰢞",
-        "󰂊",
-        "󰂋",
-        "󰂅"
-      ],
-      "default": [
-        "󰁺",
-        "󰁻",
-        "󰁼",
-        "󰁽",
-        "󰁾",
-        "󰁿",
-        "󰂀",
-        "󰂁",
-        "󰂂",
-        "󰁹"
-      ]
-    },
-    "format-full": "󰁹",
-    "interval": 5,
-    "states": {
-      "warning": 20,
-      "critical": 10
-    },
-    "tooltip-format": "{capacity}%"
-  },
-  "custom/power": {
-    "format": "󰤆",
-    "tooltip": false,
-    "on-click": "wlogout"
-  },
-  "wireplumber": {
-    "format": "{icon}",
-    "format-muted": " ",
-    "on-click": "wpctl set-mute @DEFAULT_SINK@ toggle",
-    "format-icons": [
-      " ",
-      " ",
-      " "
-    ],
-    "tooltip-format": "{volume} %"
-  },
-  "custom/anki": {
-    "exec": "~/.config/waybar/scripts/anki-status.sh",
-    "return-type": "json",
-    "interval": 300,
-    "on-click": "anki"
-  },
-  "custom/dnd": {
-    "exec": "makoctl mode | grep -q do-not-disturb && echo '{\"text\": \"󰂛\", \"class\": \"active\", \"tooltip\": \"Do not disturb: ON\"}' || echo '{\"text\": \"\", \"class\": \"\", \"tooltip\": \"\"}'",
-    "return-type": "json",
-    "interval": 1,
-    "on-click": "~/.config/hypr/scripts/toggle_dnd.sh"
-  },
-  "custom/clamav": {
-    "exec": "~/.config/waybar/scripts/clamav-status.sh",
-    "return-type": "json",
-    "interval": 1,
-    "on-click": "kitty -T Antivirus /etc/clamav/threat-manager.sh"
-  },
-  "bluetooth": {
-    "on-click": "kitty bluetuith",
-    "on-click-right": "bluetoothctl -- connect 44:73:D6:A5:28:10",
-    "format": "󰂯",
-    "format-off": "󰂲",
-    "format-connected": "󰂱",
-    "tooltip-format-enumerate-connected": "{device_alias}",
-    "tooltip-format": "{device_enumerate}"
-  },
-}
+  {
+    "output": "DP-1",
+    "include": "~/.config/waybar/common.jsonc",
+    "ext/workspaces": {
+      "on-click": "activate",
+      "sort-by-name": false,
+      "sort-by-coordinates": true,
+      "format": "{icon}",
+      "format-icons": {
+        "11": "1",
+        "12": "2",
+        "13": "3",
+        "14": "4",
+        "15": "5",
+        "16": "6",
+        "17": "7",
+        "18": "8",
+        "19": "9",
+      }
+    }
+  }
+]

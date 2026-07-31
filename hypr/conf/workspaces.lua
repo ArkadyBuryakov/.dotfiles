@@ -31,12 +31,39 @@ hl.config({
 })
 
 -- Monitor bindings
+-- 1-9/11-19 are persistent so they always exist in the compositor: waybar's
+-- ext/workspaces module renders only live ext-workspace-v1 entries and has no
+-- bar-side persistent-workspaces option like hyprland/workspaces had.
+-- 11-19 are persistent only while DP-1 is connected, otherwise they'd get
+-- moved to eDP-1 and clutter the laptop bar with a second set of buttons.
 for i = 1, 10 do
-	hl.workspace_rule({ workspace = tostring(i), monitor = "eDP-1", default = (i == 1) })
+	hl.workspace_rule({ workspace = tostring(i), monitor = "eDP-1", default = (i == 1), persistent = (i <= 9) })
 end
-for i = 11, 20 do
-	hl.workspace_rule({ workspace = tostring(i), monitor = "DP-1", default = (i == 11) })
+
+local function dp1_workspace_rules(connected)
+	for i = 11, 20 do
+		hl.workspace_rule({
+			workspace = tostring(i),
+			monitor = "DP-1",
+			default = (i == 11),
+			persistent = (connected and i <= 19),
+		})
+	end
 end
+
+dp1_workspace_rules(hl.get_monitor("DP-1") ~= nil)
+
+hl.on("monitor.added", function(mon)
+	if mon.name == "DP-1" then
+		dp1_workspace_rules(true)
+	end
+end)
+
+hl.on("monitor.removed", function(mon)
+	if mon.name == "DP-1" then
+		dp1_workspace_rules(false)
+	end
+end)
 
 -- Workspace rules
 hl.workspace_rule({ workspace = "special:magic", on_created_empty = "Telegram & slack" })
