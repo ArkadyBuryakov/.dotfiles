@@ -14,6 +14,17 @@ AGENT_RE='^(claude|codex|opencode|aider|gemini|goose|crush)$'
 WRAPPER_RE='^(node|bun|deno|python[0-9.]*)$'
 STATUS_DIR="${XDG_RUNTIME_DIR:-/tmp}/jaeger"
 
+# True if a claude process still runs tool shells (each Bash tool command,
+# foreground or run_in_background, is a direct child zsh/bash that sources a
+# ~/.claude/shell-snapshots file and lives until the command exits).
+has_live_shells() { # $1 = agent pid
+  local c
+  for c in $(pgrep -P "$1" 2>/dev/null); do
+    grep -qz 'shell-snapshots' "/proc/$c/cmdline" 2>/dev/null && return 0
+  done
+  return 1
+}
+
 scan() {
   local clients kitty_pids agents="" hooks combined enriched=""
 
@@ -108,6 +119,13 @@ scan() {
   local a cwd branch
   while IFS= read -r a; do
     [ -z "$a" ] && continue
+    # An idle title/hook can just mean the turn ended while background
+    # commands are still running; hold busy until their shells exit.
+    if [ "$(jq -r '.status' <<<"$a")" = idle ] &&
+      [ "$(jq -r '.agent' <<<"$a")" = claude ] &&
+      has_live_shells "$(jq -r '.agent_pid' <<<"$a")"; then
+      a=$(jq -c '.status = "busy"' <<<"$a")
+    fi
     cwd=$(jq -r '.cwd' <<<"$a")
     branch=$(git -C "$cwd" branch --show-current 2>/dev/null)
     enriched+=$(jq -c --arg b "$branch" '.branch = $b' <<<"$a")$'\n'
