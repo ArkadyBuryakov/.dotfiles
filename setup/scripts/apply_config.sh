@@ -5,7 +5,7 @@ DOTFILES="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CONFIG_DIR="$HOME/.config"
 
 # Symlink config directories
-CONFIG_DIRS=(hypr kitty mako nvim rofi swappy waybar wlogout yazi lazygit lazydocker)
+CONFIG_DIRS=(hypr kitty mako nvim rofi swappy waybar wlogout yazi lazygit lazydocker workforest)
 
 for dir in "${CONFIG_DIRS[@]}"; do
   rm -rf "$CONFIG_DIR/$dir"

@@ -29,6 +29,9 @@ zinit light zsh-users/zsh-syntax-highlighting
 zinit light zsh-users/zsh-completions
 zinit light zsh-users/zsh-autosuggestions
 zinit light Aloxaf/fzf-tab
+# Keep venv activate scripts from prepending "(name)" to PS1;
+# p10k's virtualenv segment displays the env instead.
+export VIRTUAL_ENV_DISABLE_PROMPT=1
 zinit light hsaunders1904/pyautoenv
 #_zsh_pyautoenv_activate
 
@@ -122,6 +125,8 @@ alias cf="cd frontend"
 alias ch="cd ~"
 alias gpc="gh pr create"
 alias gpv="gh pr view -w"
+alias gpm="gh pr merge"
+alias gpr="gh pr ready"
 
 # Path shortcuts
 cd_concat () {
@@ -181,19 +186,13 @@ ASYNCAPI_AC_ZSH_SETUP_PATH=/home/arkady/.cache/@asyncapi/cli/autocomplete/zsh_se
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
-# Custom tools
-source ~/.config/hypr/scripts/worktree/worktree.sh
-source ~/.config/hypr/scripts/worktree/worktree-tui.sh
-
-alias wt="worktree"
-alias wtc="worktree create"
-alias wto="worktree open"
-alias wtco="worktree checkout"
-alias wtd="worktree delete"
-alias wtt="worktree-tui"
-alias wtr="worktree run"
-alias wtrb="worktree run backend"
-alias wtrc="worktree run client"
-alias wtrf="worktree run frontend"
-alias wtrn="worktree run ngrok"
+# Workforest setup
+eval "$(workforest shell-init)"
+alias wfc="workforest create"
+alias wfo="workforest open"
+alias wfco="workforest checkout"
+alias wfd="workforest delete"
+alias wft="workforest tui"
+alias wfr="workforest run"
+alias wfm="workforest run make"
 

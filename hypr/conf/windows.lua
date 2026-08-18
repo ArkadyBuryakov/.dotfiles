@@ -61,14 +61,6 @@ hl.window_rule({ match = { class = "(org.telegram.desktop)", title = "(Media vie
 
 -- Float some tui menus
 hl.window_rule({
-	name = "Worktree Selectors",
-	match = { class = "(kitty)", title = "(.*Worktrees)$" },
-
-	float = true,
-	size = { 800, 380 },
-	stay_focused = true,
-})
-hl.window_rule({
 	name = "Antivirus Threat Manager",
 	match = { class = "(kitty)", title = "(Antivirus)$" },
 

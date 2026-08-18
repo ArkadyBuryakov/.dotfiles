@@ -1,0 +1,18 @@
+# Workforest user config — migrated from the bash MVP's environment behavior.
+#
+# In a session where kitty windows don't apply (ssh, plain tty), force
+# current-shell mode with:  export WORKFOREST_WINDOW_COMMAND=""
+
+# MVP: open worktrees in a new kitty OS window titled "repo: worktree".
+window_command: "kitty --title {title} --directory {worktree} $WF_COMMAND"
+
+# MVP default was $EDITOR with nvim getting "." for directories — the
+# `nvim` opener template below reproduces that.
+opener: nvim
+
+# MVP TUI opener carousel: claude | nvim | zsh | lazygit
+openers:
+  claude: claude
+  nvim: "nvim {target}"
+  zsh: zsh
+  lazygit: lazygit
