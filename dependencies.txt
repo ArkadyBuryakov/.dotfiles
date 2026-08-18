@@ -1,3 +1,8 @@
+texlive-meta
+texlive-binextra
+zathura
+zathura-pdf-mupdf
+biber
 1password
 base-devel
 bat

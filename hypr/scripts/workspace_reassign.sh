@@ -8,3 +8,6 @@ done
 for ((i = 11; i <= 20; i++)); do
   hyprctl dispatch moveworkspacetomonitor $i DP-1
 done
+
+# Cross-group moves leave stale buttons in waybar's ext/workspaces module
+~/.config/hypr/scripts/restart-waybar.sh

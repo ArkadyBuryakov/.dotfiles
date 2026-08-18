@@ -53,29 +53,26 @@ end
 
 dp1_workspace_rules(hl.get_monitor("DP-1") ~= nil)
 
+-- waybar's ext/workspaces module keeps stale buttons when workspaces switch
+-- groups on hotplug (11-19 linger on the eDP-1 bar after DP-1 reconnects),
+-- so restart it once the compositor state has settled.
 hl.on("monitor.added", function(mon)
 	if mon.name == "DP-1" then
 		dp1_workspace_rules(true)
+		hl.exec_cmd("~/.config/hypr/scripts/restart-waybar.sh")
 	end
 end)
 
 hl.on("monitor.removed", function(mon)
 	if mon.name == "DP-1" then
 		dp1_workspace_rules(false)
+		hl.exec_cmd("~/.config/hypr/scripts/restart-waybar.sh")
 	end
 end)
 
 -- Workspace rules
-hl.workspace_rule({ workspace = "special:magic", on_created_empty = "Telegram & slack" })
+hl.workspace_rule({ workspace = "special:magic", on_created_empty = "Telegram & gtk-launch org.arkady.todo.desktop" })
 hl.workspace_rule({ workspace = "special:config", on_created_empty = "gtk-launch org.arkady.config.desktop" })
-hl.workspace_rule({
-	workspace = "special:monorepo_fleetcraft",
-	on_created_empty = "gtk-launch org.fleetcraft.monorepo.desktop",
-})
-hl.workspace_rule({
-	workspace = "special:monorepo_aino",
-	on_created_empty = "gtk-launch org.aino.aino-monorepo.desktop",
-})
 
 -- Smart gaps
 -- https://wiki.hypr.land/Configuring/Basics/Workspace-Rules/#smart-gaps
