@@ -15,7 +15,7 @@
   ],
   "modules-right": [
     "custom/dnd",
-    "custom/clamav",
+    // "custom/clamav",
     "hyprland/language",
     "cpu",
     "memory",
@@ -40,7 +40,7 @@
   "clock": {
     "tooltip": true,
     "tooltip-format": "<small>{calendar}</small>",
-    "format": "  {:%H:%M    %a, %d %b %Y}",
+    "format": "  {:%H:%M    %a, %d %b %Y}"
   },
   "hyprland/language": {
     "format": "{shortDescription}",
@@ -65,7 +65,7 @@
     "on-click": "nmcli device wifi rescan && kitty ~/.config/hypr/scripts/nm-tui-delay.sh",
     "on-click-right": "nmcli device wifi rescan",
     "interval": 5,
-    "nospacing": 1,
+    "nospacing": 1
   },
   "battery": {
     "format": "{icon}",
@@ -145,5 +145,5 @@
     "format-connected": "󰂱",
     "tooltip-format-enumerate-connected": "{device_alias}",
     "tooltip-format": "{device_enumerate}"
-  },
+  }
 }
