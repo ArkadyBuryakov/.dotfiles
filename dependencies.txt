@@ -1,3 +1,5 @@
+rustup
+rust-analyzer
 texlive-meta
 texlive-binextra
 zathura
