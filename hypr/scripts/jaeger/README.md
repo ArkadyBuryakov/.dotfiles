@@ -14,7 +14,8 @@ Named after the mechs from Pacific Rim: you drift with your agents.
   process per OS window), queries each over its remote-control socket
   (`unix:@mykitty-<pid>`), and picks windows whose foreground process is a
   known agent. Status is parsed from the terminal title Claude Code maintains
-  (`⠂ task…` = busy, `✳` = idle), optionally overridden by hook state files.
+  (spinner prefix `⠂`/`◑` = busy, `✳` = idle), optionally overridden by hook
+  state files.
 - `focus.sh <kitty_pid> <win_id> [hypr_address]` — `hyprctl focuswindow` to
   the right workspace, then `kitten @ focus-window` to select the exact
   tab/window; `focus_on_activate` makes Hyprland follow.

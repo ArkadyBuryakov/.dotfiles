@@ -7,7 +7,8 @@
 # Usage: scan.sh                one-shot
 #        scan.sh --watch [sec]  re-scan every N seconds (default 1)
 #
-# Status comes from the agent's terminal title (spinner = busy, ✳ = idle),
+# Status comes from the agent's terminal title (braille/◐◓◑◒ spinner = busy,
+# ✳ = idle),
 # overridden by hook-reported state files (see claude-hook.sh) when present.
 
 AGENT_RE='^(claude|codex|opencode|aider|gemini|goose|crush)$'
@@ -64,9 +65,9 @@ scan() {
           agent_pid: $fp.pid,
           cwd: $fp.cwd,
           project: ($fp.cwd | split("/") | last),
-          task: ($w.title | sub("^[⠀-⣿✳✻] *"; "") | if . == "Claude Code" then "" else . end),
+          task: ($w.title | sub("^[⠀-⣿◐-◓✳✻] *"; "") | if . == "Claude Code" then "" else . end),
           status: (if $w.needs_attention then "waiting"
-                   elif ($w.title | test("^[⠀-⣿]")) then "busy"
+                   elif ($w.title | test("^[⠀-⣿◐-◓]")) then "busy"
                    elif ($w.title | test("^[✳✻]")) then "idle"
                    else "unknown" end),
           kitty_pid: $kpid,
