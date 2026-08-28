@@ -53,11 +53,14 @@ end
 -- Area captures go through the vendored grimblast-sharp: stock `grim -g` blurs
 -- free-region shots on fractionally scaled outputs (crops from the raw buffer
 -- instead). Window/output captures are already pixel-perfect with stock grimblast.
-bindp("Print", hl.dsp.exec_cmd("~/.config/hypr/scripts/grimblast-sharp --notify --freeze copy area"))
-bindp("SHIFT + Print", hl.dsp.exec_cmd("grimblast --notify --cursor copy output"))
-bindp(mainMod .. " + P", hl.dsp.exec_cmd("~/.config/hypr/scripts/grimblast-sharp --notify --freeze copy area"))
-bindp(mainMod .. " + CTRL + P", hl.dsp.exec_cmd("grimblast --notify --cursor copy active"))
-bindp(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("grimblast --notify --cursor copy output"))
+-- Every capture is `copysave`: copied to the clipboard AND written to $shotDir.
+local shotDir = "$HOME/Pictures/Screenshots"
+local shot = "mkdir -p " .. shotDir .. " && XDG_SCREENSHOTS_DIR=" .. shotDir .. " "
+bindp("Print", hl.dsp.exec_cmd(shot .. "~/.config/hypr/scripts/grimblast-sharp --notify --freeze copysave area"))
+bindp("SHIFT + Print", hl.dsp.exec_cmd(shot .. "grimblast --notify --cursor copysave output"))
+bindp(mainMod .. " + P", hl.dsp.exec_cmd(shot .. "~/.config/hypr/scripts/grimblast-sharp --notify --freeze copysave area"))
+bindp(mainMod .. " + CTRL + P", hl.dsp.exec_cmd(shot .. "grimblast --notify --cursor copysave active"))
+bindp(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd(shot .. "grimblast --notify --cursor copysave output"))
 bindp(mainMod .. " + ALT + P", hl.dsp.exec_cmd("pkill kooha || kooha"))
 bindp(mainMod .. " + A", hl.dsp.exec_cmd("pkill swappy || ~/.config/hypr/scripts/image-annotation.sh"))
 

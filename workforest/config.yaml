@@ -3,6 +3,9 @@ wrappers:
   kitty:
     command: kitty --title "$WF_TITLE" --directory "$WF_WORKTREE" $SHELL -c "$WF_COMMAND"
     background: true
+  sh:
+    command: $SHELL -c "$WF_COMMAND"
+    background: false
 openers:
   nvim:
     command: 'nvim "$WF_TARGET"'

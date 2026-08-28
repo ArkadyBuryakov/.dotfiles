@@ -1,4 +1,4 @@
 #!/bin/bash
 
 sleep 2
-bluetoothctl -- connect 44:73:D6:A5:28:10
+bluetoothctl -- connect 2C:BE:EE:4C:A4:24

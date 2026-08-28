@@ -31,7 +31,7 @@ hl.on("hyprland.start", function()
 	hl.exec_cmd("hyprland-per-window-layout")
 
 	-- Connect headset
-	hl.exec_cmd("~/.config/hypr/scripts/connect-headset.sh")
+	-- hl.exec_cmd("~/.config/hypr/scripts/connect-headset.sh")
 
 	-- Run keyring daemon
 	hl.exec_cmd("kwalletd6")
