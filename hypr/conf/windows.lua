@@ -82,3 +82,14 @@ hl.window_rule({
 
 -- Stop floating for strudel repl from strudel.nvim
 hl.window_rule({ match = { title = "^(strudel.cc_/)$" }, tile = true })
+
+-- RDP sessions into the docker-hosted VMs (see bin/vm).
+-- The window is a remote desktop: blur and entry animations only add latency to
+-- something that is already a video stream over a socket.
+hl.window_rule({
+	name = "VM remote desktop",
+	match = { class = "^(xfreerdp|xfreerdp3)$" },
+
+	no_blur = true,
+	no_anim = true,
+})

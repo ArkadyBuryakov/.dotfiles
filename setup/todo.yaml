@@ -7,10 +7,14 @@ apps: add symlinks for applications
 aesthetics: >-
   1. Copy custom icons
 setup_docker: >-
-  Setup user to be able to use docker:
-  1. Create docker user group (catch error if group exists and continue)
-  2. Add user to docker group and apply group to current session with `newgrp docker`
-  3. enable and start service
+  Setup rootless docker (the docker group is root-equivalent, so we do not use it):
+  1. Disable the system-wide docker daemon and drop the user from the docker group
+  2. Install the rootless daemon and enable it as a user service with lingering
+  3. Switch the docker context to rootless and allow unprivileged ports >= 80
+virtual_machines: >-
+  Setup docker-hosted VMs (see vm/README.md):
+  1. Create ~/VMs and check KVM, freerdp and rootless docker are in place
+  2. VMs are declared in vm/vms.d/*.conf and managed with `vm`
 copy_global_configs: >-
   1. 1password
   2. greetd

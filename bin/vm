@@ -1,0 +1,869 @@
+#!/bin/bash
+#
+# Unified manager for Docker-hosted virtual machines.
+#
+#   Windows guests -> dockurr/windows   (https://github.com/dockur/windows)
+#   Linux guests   -> qemux/qemu        (https://github.com/qemus/qemu)
+#
+# Both images share the same QEMU/KVM base, so one script drives both. Every VM
+# is declared by a config file in ~/.config/vm/vms.d/<name>.conf; the generated
+# compose file, the guest password and the disk image are runtime state and live
+# outside the dotfiles repo.
+#
+# This script requires *rootless* Docker and refuses to run against a root
+# daemon: a rootful daemon writes the shared folder as root and hands anything
+# in the container a path to real root on the host.
+#
+# Usage: vm <command> [name] [options]   (`vm help` for the full list)
+
+set -euo pipefail
+
+CONFIG_DIR="${VM_CONFIG_DIR:-$HOME/.config/vm/vms.d}"
+STATE_DIR="${VM_STATE_DIR:-$HOME/.local/share/vm}"
+DATA_DIR="${VM_DATA_DIR:-$HOME/VMs}"
+DESKTOP_DIR="$HOME/.local/share/applications"
+
+WINDOWS_IMAGE="dockurr/windows"
+LINUX_IMAGE="qemux/qemu"
+
+# How long to keep retrying RDP while a cold guest boots. Windows in particular
+# can take a couple of minutes from container start to a listening RDP server.
+RDP_READY_TIMEOUT="${VM_RDP_READY_TIMEOUT:-180}"
+
+# ------------------------------------------------------------------------------
+# Output helpers
+# ------------------------------------------------------------------------------
+
+info() { echo "==> $*"; }
+warn() { echo "==> WARNING: $*" >&2; }
+die() {
+  echo "==> ERROR: $*" >&2
+  exit 1
+}
+
+has() { command -v "$1" >/dev/null 2>&1; }
+
+# gum is nicer, but never required — every prompt degrades to plain read.
+ask() {
+  local header="$1" default="${2:-}" answer
+  if has gum; then
+    answer=$(gum input --header="$header" --value="$default") || return 1
+  else
+    read -r -p "$header [$default]: " answer
+    [[ -z $answer ]] && answer="$default"
+  fi
+  printf '%s' "$answer"
+}
+
+ask_secret() {
+  local header="$1" answer
+  if has gum; then
+    answer=$(gum input --password --header="$header") || return 1
+  else
+    read -r -s -p "$header: " answer
+    echo >&2
+  fi
+  printf '%s' "$answer"
+}
+
+ask_choice() {
+  local header="$1" default="$2"
+  shift 2
+  if has gum; then
+    printf '%s\n' "$@" | gum choose --header="$header" --selected="$default"
+  else
+    echo "$header" >&2
+    printf '  %s\n' "$@" >&2
+    local answer
+    read -r -p "choice [$default]: " answer
+    printf '%s' "${answer:-$default}"
+  fi
+}
+
+confirm() {
+  if has gum; then
+    gum confirm "$1"
+  else
+    local answer
+    read -r -p "$1 [y/N]: " answer
+    [[ $answer == [yY]* ]]
+  fi
+}
+
+# ------------------------------------------------------------------------------
+# Docker plumbing
+# ------------------------------------------------------------------------------
+
+compose() {
+  local name="$1"
+  shift
+  if docker compose version >/dev/null 2>&1; then
+    docker compose -p "vm-$name" -f "$STATE_DIR/$name/docker-compose.yml" "$@"
+  else
+    docker-compose -p "vm-$name" -f "$STATE_DIR/$name/docker-compose.yml" "$@"
+  fi
+}
+
+# Refuse to touch a rootful daemon. Checked on every command that talks to
+# Docker, not just install, because the active context can change underneath us.
+require_rootless() {
+  has docker || die "docker is not installed. Run setup/scripts/setup_docker.sh"
+
+  docker info >/dev/null 2>&1 ||
+    die "cannot reach the Docker daemon. Is the rootless service running?
+    systemctl --user status docker"
+
+  local security
+  security=$(docker info --format '{{json .SecurityOptions}}' 2>/dev/null || echo "")
+  if [[ $security != *rootless* ]]; then
+    die "the active Docker context is NOT rootless.
+
+    Current endpoint: $(docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null || echo unknown)
+
+    Refusing to run: a rootful daemon writes the shared folder as root and
+    exposes host root to the container. Switch back with:
+        docker context use rootless
+    or run setup/scripts/setup_docker.sh to set rootless Docker up."
+  fi
+}
+
+# ------------------------------------------------------------------------------
+# VM configuration
+# ------------------------------------------------------------------------------
+
+list_vm_names() {
+  [[ -d $CONFIG_DIR ]] || return 0
+  local file
+  for file in "$CONFIG_DIR"/*.conf; do
+    [[ -e $file ]] || continue
+    basename "$file" .conf
+  done
+}
+
+# Populates the VM_* globals from the config file, applying per-kind defaults.
+load_vm() {
+  local name="$1" file="$CONFIG_DIR/$1.conf"
+
+  [[ $name =~ ^[A-Za-z0-9_-]{1,32}$ ]] ||
+    die "invalid VM name '$name' (letters, digits, - and _ only)"
+  [[ -f $file ]] || die "no such VM: '$name'. Configs live in $CONFIG_DIR"
+
+  # Defaults shared by both kinds.
+  KIND="linux"
+  RAM_SIZE="4G"
+  CPU_CORES="2"
+  DISK_SIZE="64G"
+  USERNAME=""
+  ACCESS=""
+  WEB_PORT="8006"
+  RDP_PORT="3389"
+  SSH_PORT=""
+  # How the guest display relates to the RDP window:
+  #   dynamic  the guest resizes to match the window (needs server-side RDPEDISP)
+  #   smart    the guest keeps its resolution; the image is scaled to the window
+  #   fixed    connect at exactly RDP_SIZE and do not scale
+  RDP_SIZING="dynamic"
+  RDP_SIZE="1920x1080"
+  GPU="N"
+  AUDIO="N"
+  VERSION="11"
+  BOOT="alpine"
+  ARGUMENTS=""
+  DESCRIPTION=""
+  # Reset these too: load_vm is called in a loop by `vm list`, and a value left
+  # over from the previous config would silently apply to the next VM.
+  STORAGE=""
+  SHARE=""
+
+  # shellcheck source=/dev/null
+  source "$file"
+
+  NAME="$name"
+  STORAGE="${STORAGE:-$DATA_DIR/$name/disk}"
+  SHARE="${SHARE:-$DATA_DIR/$name/share}"
+  COMPOSE_DIR="$STATE_DIR/$name"
+  COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
+  PASSWORD_FILE="$COMPOSE_DIR/password"
+  CONTAINER="vm-$name"
+
+  case "$KIND" in
+    windows)
+      IMAGE="$WINDOWS_IMAGE"
+      ACCESS="${ACCESS:-rdp}"
+      USERNAME="${USERNAME:-docker}"
+      ;;
+    linux)
+      IMAGE="$LINUX_IMAGE"
+      ACCESS="${ACCESS:-web}"
+      ;;
+    *) die "$file: KIND must be 'windows' or 'linux', got '$KIND'" ;;
+  esac
+
+  [[ $RAM_SIZE =~ ^[0-9]{1,3}G$ ]] || die "$file: RAM_SIZE must look like '8G'"
+  [[ $DISK_SIZE =~ ^[0-9]{1,4}G$ ]] || die "$file: DISK_SIZE must look like '64G'"
+  [[ $CPU_CORES =~ ^[0-9]{1,2}$ ]] || die "$file: CPU_CORES must be a number"
+  [[ $WEB_PORT =~ ^[0-9]{2,5}$ ]] || die "$file: WEB_PORT must be a port number"
+  [[ $RDP_PORT =~ ^[0-9]{2,5}$ ]] || die "$file: RDP_PORT must be a port number"
+  [[ $ACCESS == rdp || $ACCESS == web ]] || die "$file: ACCESS must be 'rdp' or 'web'"
+  [[ $RDP_SIZING =~ ^(dynamic|smart|fixed)$ ]] ||
+    die "$file: RDP_SIZING must be 'dynamic', 'smart' or 'fixed'"
+  [[ $RDP_SIZE =~ ^[0-9]{3,5}x[0-9]{3,5}$ ]] || die "$file: RDP_SIZE must look like '1920x1080'"
+}
+
+# The password is stored raw, in its own 0600 file, rather than in a .env: an
+# .env value goes through Compose's interpolation rules, so a password
+# containing '$' would be silently mangled or would swallow another variable.
+read_password() {
+  [[ -f $PASSWORD_FILE ]] || return 1
+  cat "$PASSWORD_FILE"
+}
+
+write_password() {
+  install -d -m 700 "$COMPOSE_DIR"
+  local tmp
+  tmp=$(mktemp "$COMPOSE_DIR/.password.XXXXXX")
+  chmod 600 "$tmp"
+  printf '%s' "$1" >"$tmp"
+  mv -f "$tmp" "$PASSWORD_FILE"
+}
+
+# Two layers apply to the compose file at parse time, in this order: Compose
+# interpolates variables over the raw text ($VAR, $$), then YAML parses the
+# double-quoted scalar. So encode for the inner layer first (backslash, then
+# quote) and for the interpolation layer last, and a password containing " \ or
+# $ reaches the guest verbatim.
+escape_for_compose() {
+  local value="$1"
+  value=${value//\\/\\\\}
+  value=${value//\"/\\\"}
+  value=${value//\$/\$\$}
+  printf '%s' "$value"
+}
+
+# ------------------------------------------------------------------------------
+# Compose generation
+# ------------------------------------------------------------------------------
+
+# Rootless notes, derived from src/network.sh in the container:
+#
+#   * NETWORK defaults to "Y" (NAT), which needs a bridge, /dev/net/tun and
+#     NET_ADMIN. None of that is available rootless, so the container detects
+#     ROOTLESS and silently falls back to user-mode networking. Asking for
+#     "passt" up front skips the failed attempt and its timeout.
+#   * With user-mode networking, `ports:` only reaches the container. Ports that
+#     must reach the *guest* have to be listed in USER_PORTS as well.
+#   * /dev/kvm is 0666 by Arch's udev default, so it passes through rootless
+#     without any group membership. Same for /dev/dri/renderD128 (GPU: "Y").
+render_compose() {
+  install -d -m 700 "$COMPOSE_DIR"
+  install -d -m 700 "$STORAGE" "$SHARE"
+
+  local tz user_ports
+  tz=$(timedatectl show -p Timezone --value 2>/dev/null || echo UTC)
+
+  local -a env_lines=()
+  local -a device_lines=("      - /dev/kvm")
+  local -a port_lines=("      - 127.0.0.1:$WEB_PORT:8006")
+
+  if [[ $KIND == windows ]]; then
+    user_ports="3389/tcp,3389/udp"
+    local password
+    password=$(read_password) || die "no password stored for '$NAME'"
+    env_lines+=(
+      "      VERSION: \"$VERSION\""
+      "      USERNAME: \"$USERNAME\""
+      "      PASSWORD: \"$(escape_for_compose "$password")\""
+      # Gate the noVNC console on the same credentials, so another local account
+      # cannot drive the VM through the web port.
+      "      PROTECT: \"Y\""
+      # Windows assumes the RTC is local time and will fight the host over it.
+      "      ARGUMENTS: \"-rtc base=localtime,clock=host,driftfix=slew\""
+    )
+    port_lines+=(
+      "      - 127.0.0.1:$RDP_PORT:3389/tcp"
+      "      - 127.0.0.1:$RDP_PORT:3389/udp"
+    )
+  else
+    user_ports="22"
+    env_lines+=("      BOOT: \"$BOOT\"")
+    if [[ $ACCESS == rdp ]]; then
+      # xrdp inside the guest; see vm/README.md for the guest-side setup.
+      user_ports="22,3389/tcp,3389/udp"
+      port_lines+=(
+        "      - 127.0.0.1:$RDP_PORT:3389/tcp"
+        "      - 127.0.0.1:$RDP_PORT:3389/udp"
+      )
+    fi
+    if [[ -n $SSH_PORT ]]; then
+      port_lines+=("      - 127.0.0.1:$SSH_PORT:22")
+    fi
+    if [[ $GPU == Y ]]; then
+      env_lines+=("      GPU: \"Y\"")
+      device_lines+=("      - /dev/dri")
+    fi
+    if [[ $AUDIO == Y ]]; then
+      env_lines+=("      AUDIO: \"Y\"")
+    fi
+    [[ -n $ARGUMENTS ]] && env_lines+=("      ARGUMENTS: \"$ARGUMENTS\"")
+  fi
+
+  local tmp
+  tmp=$(mktemp "$COMPOSE_DIR/.compose.XXXXXX")
+  {
+    echo "# Generated by \`vm install $NAME\` from $CONFIG_DIR/$NAME.conf"
+    echo "# Edits here are lost on the next install; change the config instead."
+    echo "services:"
+    echo "  vm:"
+    echo "    image: $IMAGE"
+    echo "    container_name: $CONTAINER"
+    echo "    environment:"
+    echo "      RAM_SIZE: \"$RAM_SIZE\""
+    echo "      CPU_CORES: \"$CPU_CORES\""
+    echo "      DISK_SIZE: \"$DISK_SIZE\""
+    echo "      TZ: \"$tz\""
+    echo "      NETWORK: \"passt\""
+    echo "      USER_PORTS: \"$user_ports\""
+    printf '%s\n' "${env_lines[@]}"
+    echo "    devices:"
+    printf '%s\n' "${device_lines[@]}"
+    echo "    ports:"
+    printf '%s\n' "${port_lines[@]}"
+    echo "    volumes:"
+    echo "      - $STORAGE:/storage"
+    echo "      - $SHARE:/shared"
+    echo "    restart: \"no\""
+    echo "    stop_grace_period: 2m"
+  } >"$tmp"
+  chmod 600 "$tmp"
+  mv -f "$tmp" "$COMPOSE_FILE"
+}
+
+write_desktop_entry() {
+  install -d "$DESKTOP_DIR"
+  local icon="$HOME/Documents/.dotfiles/icons/Apps/Common/terminal.png"
+  [[ $KIND == windows ]] && icon="windows"
+
+  cat >"$DESKTOP_DIR/org.arkady.vm-$NAME.desktop" <<EOF
+[Desktop Entry]
+Name=${DESCRIPTION:-$NAME VM}
+Comment=Start the $NAME virtual machine and connect to it
+Exec=vm launch $NAME
+Icon=$icon
+Categories=System;Virtualization;
+Version=1.0
+Type=Application
+Terminal=false
+EOF
+}
+
+# ------------------------------------------------------------------------------
+# Preflight
+# ------------------------------------------------------------------------------
+
+# Free space on the filesystem that actually holds the disk, walking up to the
+# nearest existing ancestor so a not-yet-created path still measures correctly.
+available_gb() {
+  local path="$1"
+  while [[ ! -d $path && $path != / ]]; do path=$(dirname "$path"); done
+  df -BG --output=avail "$path" 2>/dev/null | tail -1 | tr -dc '0-9'
+}
+
+check_prerequisites() {
+  local disk_gb="${DISK_SIZE%G}"
+  local required=$((disk_gb + 10)) # guest image download + overhead
+
+  [[ -e /dev/kvm ]] || die "KVM is not available.
+
+    Enable virtualization in the BIOS, or load the module:
+        sudo modprobe kvm_intel   # Intel
+        sudo modprobe kvm_amd     # AMD"
+
+  [[ -r /dev/kvm && -w /dev/kvm ]] ||
+    die "/dev/kvm is not readable/writable by you ($(stat -c '%A %U:%G' /dev/kvm)).
+    Rootless Docker cannot use KVM without it."
+
+  local available
+  available=$(available_gb "$STORAGE")
+  [[ -n $available ]] || die "could not determine free space for $STORAGE"
+  ((available >= required)) || die "not enough disk space for $NAME.
+    Available: ${available}G
+    Required:  ${required}G (${disk_gb}G disk + 10G for the image)"
+
+  if [[ $ACCESS == rdp ]] && ! has xfreerdp3; then
+    die "xfreerdp3 not found. Install it with: yay -S --needed freerdp"
+  fi
+}
+
+# ------------------------------------------------------------------------------
+# Commands
+# ------------------------------------------------------------------------------
+
+cmd_list() {
+  require_rootless
+  local name status
+  printf '%-14s %-8s %-10s %-7s %-6s %s\n' NAME KIND ACCESS RAM DISK STATUS
+  for name in $(list_vm_names); do
+    load_vm "$name"
+    if [[ -f $COMPOSE_FILE ]]; then
+      status=$(docker inspect --format '{{.State.Status}}' "$CONTAINER" 2>/dev/null || echo "-")
+      [[ -z $status ]] && status="-"
+    else
+      status="not installed"
+    fi
+    printf '%-14s %-8s %-10s %-7s %-6s %s\n' \
+      "$name" "$KIND" "$ACCESS" "$RAM_SIZE" "$DISK_SIZE" "$status"
+  done
+}
+
+cmd_install() {
+  local name="$1"
+  require_rootless
+  load_vm "$name"
+
+  # Re-running install on an existing VM is the supported way to apply config
+  # changes (RAM, cores, ports, GPU). Note it before render_compose overwrites
+  # the evidence, so the prompts can say what is actually about to happen.
+  local reconfigure=false
+  [[ -f $COMPOSE_FILE ]] && reconfigure=true
+
+  if [[ $reconfigure == true ]]; then
+    info "Reconfiguring the $name VM ($KIND, $IMAGE) — the disk is kept"
+  else
+    info "Configuring the $name VM ($KIND, $IMAGE)"
+  fi
+
+  local total_ram_gb total_cores
+  total_ram_gb=$(awk 'NR==1 {printf "%d", $2/1024/1024}' /proc/meminfo)
+  total_cores=$(nproc)
+  echo "    Host: ${total_ram_gb}G RAM, $total_cores cores"
+  echo "    Config: $RAM_SIZE RAM, $CPU_CORES cores, $DISK_SIZE disk"
+  echo
+
+  ((${RAM_SIZE%G} <= total_ram_gb)) ||
+    die "RAM_SIZE ($RAM_SIZE) exceeds host memory (${total_ram_gb}G)"
+  ((CPU_CORES <= total_cores)) ||
+    die "CPU_CORES ($CPU_CORES) exceeds host cores ($total_cores)"
+
+  check_prerequisites
+
+  # Windows needs credentials for both the guest account and the RDP session.
+  # Linux guests get their accounts from the distro installer instead.
+  local password
+  if [[ $KIND == windows ]]; then
+    if password=$(read_password); then
+      info "Reusing the stored password for '$USERNAME'"
+    else
+      password=$(ask_secret "Password for the Windows account '$USERNAME'") || exit 1
+      [[ -n $password ]] || die "a password is required"
+      [[ $password =~ ^[[:print:]]{1,64}$ ]] ||
+        die "password must be 1-64 printable characters"
+    fi
+    write_password "$password"
+  elif [[ $ACCESS == rdp ]]; then
+    # A Linux guest's RDP credentials belong to whatever server runs inside it
+    # (KRDP has its own username/password, separate from the login account), so
+    # we cannot set them from here — only remember them. Optional: leave it
+    # blank and `vm launch` asks each time.
+    if password=$(read_password); then
+      info "Reusing the stored RDP password for '${USERNAME:-the guest}'"
+    else
+      password=$(ask_secret "RDP password for '$NAME' (blank = ask on each launch)") || true
+      [[ -n $password ]] && write_password "$password"
+    fi
+  fi
+
+  render_compose
+  write_desktop_entry
+  info "Wrote $COMPOSE_FILE"
+
+  if [[ $reconfigure == true ]]; then
+    confirm "Recreate the '$name' container with the new settings?" || {
+      info "Compose updated but not applied. Apply it later with: vm start $name"
+      return 0
+    }
+    # `up -d` recreates the container when the compose has changed. That is a
+    # hard power cycle for a running guest, so bring it down cleanly first.
+    compose "$name" down 2>/dev/null || true
+    compose "$name" up -d || die "failed to start the VM. Check: vm status $name"
+    info "'$name' restarted with the new settings ($RAM_SIZE RAM, $CPU_CORES cores)"
+    return 0
+  fi
+
+  confirm "Start '$name' now and begin the installation?" || {
+    info "Skipped. Start it later with: vm start $name"
+    return 0
+  }
+
+  info "Pulling $IMAGE and starting the VM..."
+  compose "$name" up -d || die "failed to start the VM. Check: vm status $name"
+
+  cat <<EOF
+
+The guest is installing. This takes a while (a Windows image is ~8G, most Linux
+images are 1-4G). Watch it in the web console:
+
+    http://127.0.0.1:$WEB_PORT
+
+    vm console $name    # opens that URL in a browser window
+    vm status $name     # check on it
+EOF
+  [[ $KIND == windows ]] && echo "    (the console asks for $USERNAME and the password you just set)"
+  echo
+}
+
+# The compose is only rendered by `vm install`, so an edited .conf sits there
+# doing nothing until then. Say so rather than letting the VM come up with
+# settings the config file no longer describes.
+warn_if_stale_config() {
+  [[ -f $COMPOSE_FILE ]] || return 0
+  if [[ $CONFIG_DIR/$NAME.conf -nt $COMPOSE_FILE ]]; then
+    warn "$CONFIG_DIR/$NAME.conf changed since '$NAME' was last configured.
+    Those changes are NOT active. Apply them with: vm install $NAME"
+  fi
+}
+
+cmd_start() {
+  local name="$1"
+  require_rootless
+  load_vm "$name"
+  [[ -f $COMPOSE_FILE ]] || die "'$name' is not installed. Run: vm install $name"
+  warn_if_stale_config
+  compose "$name" up -d
+  info "'$name' is starting. Console: http://127.0.0.1:$WEB_PORT"
+}
+
+cmd_stop() {
+  local name="$1"
+  require_rootless
+  load_vm "$name"
+  [[ -f $COMPOSE_FILE ]] || die "'$name' is not installed."
+  info "Stopping '$name' (up to 2 minutes for a clean guest shutdown)..."
+  compose "$name" down
+  info "'$name' stopped."
+}
+
+cmd_status() {
+  local name="$1"
+  require_rootless
+  load_vm "$name"
+  [[ -f $COMPOSE_FILE ]] || die "'$name' is not installed. Run: vm install $name"
+
+  local status
+  status=$(docker inspect --format '{{.State.Status}}' "$CONTAINER" 2>/dev/null || echo "")
+
+  if [[ -z $status ]]; then
+    echo "'$name' has no container. Start it with: vm start $name"
+  elif [[ $status == running ]]; then
+    cat <<EOF
+'$name' is RUNNING
+
+    Console:  http://127.0.0.1:$WEB_PORT
+EOF
+    [[ $ACCESS == rdp ]] && echo "    RDP:      127.0.0.1:$RDP_PORT"
+    cat <<EOF
+    Disk:     $STORAGE
+    Shared:   $SHARE
+
+    vm launch $name     connect
+    vm stop $name       shut down
+EOF
+  else
+    echo "'$name' is stopped (status: $status). Start it with: vm start $name"
+  fi
+}
+
+cmd_console() {
+  local name="$1"
+  require_rootless
+  load_vm "$name"
+  local url="http://127.0.0.1:$WEB_PORT"
+
+  # A dedicated app window beats a browser tab for something you treat as a
+  # machine. Chromium's --app does that; override with VM_CONSOLE_CMD.
+  if [[ -n ${VM_CONSOLE_CMD:-} ]]; then
+    ${VM_CONSOLE_CMD} "$url" &
+  elif has chromium; then
+    chromium --app="$url" >/dev/null 2>&1 &
+  elif has google-chrome-stable; then
+    google-chrome-stable --app="$url" >/dev/null 2>&1 &
+  else
+    xdg-open "$url" >/dev/null 2>&1 &
+  fi
+  disown
+  info "Opened $url"
+}
+
+cmd_launch() {
+  local name="$1" keep_alive=false
+  shift
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -k | --keep-alive) keep_alive=true ;;
+      *) die "unknown option for launch: $1" ;;
+    esac
+    shift
+  done
+
+  require_rootless
+  load_vm "$name"
+  [[ -f $COMPOSE_FILE ]] || die "'$name' is not installed. Run: vm install $name"
+  warn_if_stale_config
+
+  info "Starting '$name'..."
+  compose "$name" up -d || die "failed to start '$name'"
+
+  if [[ $ACCESS == web ]]; then
+    info "Waiting for the console to come up..."
+    local i
+    for i in {1..30}; do
+      curl -sf -o /dev/null "http://127.0.0.1:$WEB_PORT" && break
+      sleep 1
+    done
+    cmd_console "$name"
+    return 0
+  fi
+
+  connect_rdp "$name"
+
+  if [[ $keep_alive == true ]]; then
+    info "RDP closed. '$name' is still running — stop it with: vm stop $name"
+  else
+    info "RDP closed. Stopping '$name'..."
+    compose "$name" down && info "'$name' stopped."
+  fi
+}
+
+connect_rdp() {
+  local name="$1" user pass
+
+  user="$USERNAME"
+  pass=$(read_password) || pass=""
+  if [[ $KIND == linux ]]; then
+    # The xrdp account is a guest-side account we never created, so ask unless
+    # the config named one.
+    [[ -n $user ]] || user=$(ask "Username for the xrdp session on '$name'") || exit 1
+    [[ -n $pass ]] || pass=$(ask_secret "Password for '$user'") || exit 1
+  fi
+  [[ -n $user && -n $pass ]] || die "no credentials stored for '$name'"
+
+  # FreeRDP 3 tries Kerberos before NTLM, and krb5 ships /etc/krb5.conf as the
+  # MIT sample with default_realm = ATHENA.MIT.EDU. Every connect then hunts for
+  # MIT's KDC — off-network that blocks ~23s per attempt and no window is ever
+  # drawn. These guests authenticate against a local account, so point FreeRDP
+  # at a realm-less config and let it fall straight through to NTLM.
+  local krb5_conf="$STATE_DIR/krb5.conf"
+  install -d -m 700 "$STATE_DIR"
+  if [[ ! -f $krb5_conf ]]; then
+    printf '[libdefaults]\n  dns_lookup_kdc = false\n  dns_lookup_realm = false\n' >"$krb5_conf"
+  fi
+  export KRB5_CONFIG="$krb5_conf"
+
+  # FreeRDP only understands a few discrete scale factors, so map the monitor
+  # scale onto the nearest one it accepts.
+  local scale_arg="" scale_percent=100
+  if has hyprctl && has jq; then
+    scale_percent=$(hyprctl monitors -j 2>/dev/null |
+      jq -r '.[] | select(.focused == true) | .scale' |
+      awk '{print int($1 * 100)}') || scale_percent=100
+  fi
+  if ((scale_percent >= 170)); then
+    scale_arg="/scale:180"
+  elif ((scale_percent >= 130)); then
+    scale_arg="/scale:140"
+  fi
+
+  local -a rdp_args=(
+    "/u:$user"
+    "/p:$pass"
+    "/v:127.0.0.1:$RDP_PORT"
+    "/title:VM: $name"
+    /gfx:AVC444
+    /sound
+    /microphone
+    /clipboard
+    /cert:ignore
+    -grab-keyboard
+    /floatbar:sticky:off,default:visible,show:fullscreen
+    # Default verbosity prints a screenful of warnings on every connect.
+    /log-level:ERROR
+  )
+  [[ -n $scale_arg ]] && rdp_args+=("$scale_arg")
+
+  # These three are mutually exclusive; FreeRDP ignores or rejects combinations.
+  #
+  # 'dynamic' needs the server to implement the RDPEDISP display-control
+  # channel. Windows does. KRDP only gained it after 6.7.4 (src/DisplayControl
+  # is in master, in no released tag), so a Plasma guest needs 'smart' until
+  # that ships — otherwise the request goes unanswered and nothing resizes.
+  case "$RDP_SIZING" in
+    dynamic) rdp_args+=(+dynamic-resolution) ;;
+    smart) rdp_args+=(/smart-sizing) ;;
+    fixed) rdp_args+=("/size:$RDP_SIZE") ;;
+  esac
+
+  # Publishing the port does not mean the guest is listening on it: rootlesskit
+  # accepts connections on the host side the moment the container starts, while
+  # the guest is still booting and its RDP server has not started. So probing the
+  # port proves nothing — retry the real connection until it sticks.
+  local errfile deadline=$((SECONDS + RDP_READY_TIMEOUT)) started rc announced=false
+  errfile=$(mktemp)
+
+  info "Connecting over RDP..."
+  while :; do
+    rc=0
+    started=$SECONDS
+    # /args-from keeps the password out of the process list. It cannot be
+    # combined with other arguments, so the whole command line goes via stdin.
+    printf '%s\n' "${rdp_args[@]}" | xfreerdp3 /args-from:stdin 2>"$errfile" || rc=$?
+
+    ((rc == 0)) && break
+    # A session that lasted more than a moment was a real one that the user
+    # ended; only an immediate exit means we never got in.
+    ((SECONDS - started >= 10)) && break
+
+    if ! grep -q "ERRCONNECT_CONNECT_TRANSPORT_FAILED\|ERRCONNECT_CONNECT_FAILED" "$errfile"; then
+      cat "$errfile" >&2
+      warn "RDP connection to '$name' failed — see above."
+      break
+    fi
+
+    if ((SECONDS >= deadline)); then
+      cat "$errfile" >&2
+      warn "'$name' never answered RDP on 127.0.0.1:$RDP_PORT within ${RDP_READY_TIMEOUT}s.
+
+    Is an RDP server actually running in the guest? On KDE, install krdp and
+    enable System Settings > Remote Desktop. Check the guest's state with:
+        vm console $name"
+      break
+    fi
+
+    if [[ $announced == false ]]; then
+      info "Guest is still booting — retrying until it answers..."
+      announced=true
+    fi
+    sleep 3
+  done
+
+  rm -f "$errfile"
+}
+
+cmd_remove() {
+  local name="$1"
+  require_rootless
+  load_vm "$name"
+
+  cat <<EOF
+This permanently deletes the '$name' VM:
+
+    container   $CONTAINER
+    disk        $STORAGE   ($(du -sh "$STORAGE" 2>/dev/null | cut -f1 || echo "empty"))
+
+The shared folder is KEPT:
+
+    shared      $SHARE
+
+EOF
+  confirm "Delete the '$name' VM and its disk?" || {
+    info "Cancelled."
+    return 1
+  }
+
+  if [[ -f $COMPOSE_FILE ]]; then
+    compose "$name" down -v 2>/dev/null || true
+  fi
+  docker rm -f "$CONTAINER" 2>/dev/null || true
+
+  # Only ever remove the disk directory, and only when it is not the same tree
+  # as the share. Belt and braces around an rm -rf built from a config file.
+  if [[ -d $STORAGE ]]; then
+    local storage_real share_real
+    storage_real=$(realpath "$STORAGE")
+    share_real=$(realpath "$SHARE" 2>/dev/null || echo "")
+    [[ -n $storage_real && $storage_real != "/" && $storage_real != "$HOME" ]] ||
+      die "refusing to delete '$storage_real'"
+    if [[ -n $share_real && ($storage_real == "$share_real" || $share_real == "$storage_real"/*) ]]; then
+      die "refusing to delete '$storage_real': the shared folder lives inside it"
+    fi
+    rm -rf "$storage_real"
+    info "Deleted $storage_real"
+  fi
+
+  rm -rf "$COMPOSE_DIR"
+  rm -f "$DESKTOP_DIR/org.arkady.vm-$name.desktop"
+  info "'$name' removed. The config in $CONFIG_DIR/$name.conf was kept."
+}
+
+cmd_menu() {
+  local names name
+  names=$(list_vm_names) || true
+  [[ -n $names ]] || die "no VMs configured in $CONFIG_DIR"
+  name=$(printf '%s\n' $names | rofi -dmenu -i -p "VM") || exit 0
+  [[ -n $name ]] || exit 0
+  cmd_launch "$name"
+}
+
+cmd_key() {
+  # The OEM Windows key lives in the ACPI MSDM table and survives replacing
+  # Windows with Linux. It activates Windows on this hardware; it usually will
+  # NOT activate a VM.
+  local msdm=/sys/firmware/acpi/tables/MSDM key=""
+  [[ -e $msdm ]] || die "no Windows product key in firmware (no MSDM table)"
+
+  local reader=(cat)
+  has strings && reader=(strings)
+  if [[ -r $msdm ]]; then
+    key=$("${reader[@]}" "$msdm" | grep -aoEm1 '[A-Z0-9]{5}(-[A-Z0-9]{5}){4}') || true
+  else
+    warn "reading the firmware table needs root"
+    key=$(sudo "${reader[@]}" "$msdm" | grep -aoEm1 '[A-Z0-9]{5}(-[A-Z0-9]{5}){4}') || true
+  fi
+
+  [[ -n $key ]] || die "MSDM table found, but no product key could be extracted"
+  printf '%s\n' "$key"
+}
+
+usage() {
+  cat <<'EOF'
+vm — manage Docker-hosted virtual machines
+
+  vm list                     list configured VMs and their status
+  vm install <name>           create/refresh a VM and start the guest install
+  vm launch <name> [-k]       start and connect (RDP, or the web console)
+                              -k, --keep-alive  leave it running on disconnect
+  vm start <name>             start without connecting
+  vm stop <name>              shut the guest down
+  vm status <name>            show state, ports and paths
+  vm console <name>           open the web console in a browser window
+  vm remove <name>            delete the VM and its disk (keeps the share)
+  vm menu                     pick a VM with rofi and launch it
+  vm key                      print the OEM Windows key from firmware
+
+VMs are declared in ~/.config/vm/vms.d/<name>.conf
+Disks and shared folders live in ~/VMs/<name>/
+Requires rootless Docker — see setup/scripts/setup_docker.sh
+EOF
+}
+
+# ------------------------------------------------------------------------------
+
+main() {
+  local command="${1:-help}"
+  shift || true
+
+  case "$command" in
+    list | ls) cmd_list ;;
+    menu) cmd_menu ;;
+    key) cmd_key ;;
+    help | -h | --help) usage ;;
+    install | launch | start | stop | status | console | remove)
+      [[ $# -ge 1 ]] || die "'$command' needs a VM name. Try: vm list"
+      "cmd_$command" "$@"
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"
