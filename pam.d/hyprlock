@@ -1,0 +1,6 @@
+# PAM configuration file for hyprlock
+# the 'login' configuration file (see /etc/pam.d/login)
+#
+# Stock file, unmodified: hyprlock inherits howdy from /etc/pam.d/login.
+
+auth        include     login

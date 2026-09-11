@@ -1,0 +1,18 @@
+#%PAM-1.0
+# Arch stock /etc/pam.d/su + howdy as a fallback after the password prompt.
+# pam_rootok stays first so root never needs a password or a face.
+# success=1 skips howdy and lands on the stock pam_unix, which re-uses the
+# cached token rather than prompting again.
+
+auth            sufficient      pam_rootok.so
+auth            [success=1 authinfo_unavail=die conv_err=die default=ignore] pam_unix.so
+auth            sufficient      pam_howdy.so
+# Uncomment the following line to implicitly trust users in the "wheel" group.
+#auth           sufficient      pam_wheel.so trust use_uid
+# Uncomment the following line to require a user to be in the "wheel" group.
+#auth           required        pam_wheel.so use_uid
+auth            required        pam_unix.so
+account         required        pam_unix.so
+session         required        pam_unix.so
+session         required        pam_limits.so
+password        include         system-auth

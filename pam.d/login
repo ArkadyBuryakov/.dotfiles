@@ -1,0 +1,11 @@
+#%PAM-1.0
+# Arch stock /etc/pam.d/login + howdy as a fallback after the password prompt.
+# See ./greetd for how the control field works.
+
+auth       requisite    pam_nologin.so
+auth       [success=1 authinfo_unavail=die conv_err=die default=ignore] pam_unix.so
+auth       sufficient   pam_howdy.so
+auth       include      system-local-login
+account    include      system-local-login
+session    include      system-local-login
+password   include      system-local-login

@@ -1,0 +1,10 @@
+#%PAM-1.0
+# Arch stock /etc/pam.d/sudo + howdy as a fallback after the password prompt.
+# See ./greetd for how the control field works.
+
+auth		[success=1 authinfo_unavail=die conv_err=die default=ignore] pam_unix.so
+auth		sufficient	pam_howdy.so
+auth		include		system-auth
+account		include		system-auth
+session		include		system-auth
+session		optional	pam_systemd.so class=none

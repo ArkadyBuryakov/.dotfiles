@@ -1,0 +1,11 @@
+#%PAM-1.0
+# Vendor /usr/lib/pam.d/polkit-1 + howdy as a fallback after the password
+# prompt. See ./greetd for how the control field works.
+# Needs the polkit-agent-helper camera override, see ../howdy/README.md step 5.
+
+auth       [success=1 authinfo_unavail=die conv_err=die default=ignore] pam_unix.so
+auth       sufficient   pam_howdy.so
+auth       include      system-auth
+account    include      system-auth
+password   include      system-auth
+session    include      system-auth

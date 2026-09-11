@@ -6,8 +6,8 @@ To setup follow [ArchWiki page](https://wiki.archlinux.org/title/Howdy#Add_corre
   - Update device path
   - Optionally update `dark_threshold` to higher value (e.g. 100) if IR emitter blinks.
 3. Add your face by running
-4. Update PAM configs to allow allow login using howdy
-  - copy and replace files from `./pam.d/` to `/etc/pam.d/`
+4. Install the PAM configs so password prompts fall back to howdy:
+  `bash pam.d/apply-pam.sh` (see [`pam.d/README.md`](../pam.d/README.md))
 5. Update polkit service to allow using camera: https://github.com/boltgolt/howdy/issues/1077#issuecomment-3693110823
   - run `sudo systemctl edit polkit-agent-helper@.service`
   - add following rows:
