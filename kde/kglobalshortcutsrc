@@ -278,5 +278,8 @@ _launch=Meta+T
 [services][org.kde.plasma-systemmonitor.desktop]
 _launch=Ctrl+Shift+Esc
 
+[services][rofi.desktop]
+_launch=Meta+Space
+
 [services][zen.desktop]
 new-window=Meta+B
