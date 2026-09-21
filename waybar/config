@@ -1,47 +1,11 @@
-// Two bars, one per output, sharing common.jsonc. They differ only in the
-// workspaces module: the external monitor presents its workspaces 11-19 as
-// 1-9, while the laptop bar shows real names — so when DP-1 is disconnected
-// and occupied 11-19 workspaces migrate to eDP-1, they are distinguishable
-// from the native 1-9.
+// Static fallback: a single bar with no `output` key, so it is drawn on every
+// monitor whatever it is called. Used when waybar is started by hand.
 //
-// ext/workspaces (ext-workspace-v1 protocol) instead of hyprland/workspaces:
-// the hyprland module dispatches classic IPC syntax, which the lua-based
-// hyprland config no longer accepts, so clicks silently failed. Workspaces
-// 1-9/11-19 are kept persistent compositor-side in hypr/conf/workspaces.lua.
-//
-// Sorting: Hyprland sends the numeric workspace id via the coordinates event
-// (it never sends workspace_id, and name-sorting falls back to lexicographic
-// because special:* names are non-numeric).
+// The session instead runs hypr/scripts/restart-waybar.sh, which generates a
+// bar per monitor from the roles in hypr/conf/roles.lua — the only difference
+// being that the secondary monitor's bar displays workspaces 11-19 as 1-9.
 [
   {
-    "output": "eDP-1",
-    "include": "~/.config/waybar/common.jsonc",
-    "ext/workspaces": {
-      "on-click": "activate",
-      "sort-by-name": false,
-      "sort-by-coordinates": true,
-      "format": "{name}"
-    }
-  },
-  {
-    "output": "DP-1",
-    "include": "~/.config/waybar/common.jsonc",
-    "ext/workspaces": {
-      "on-click": "activate",
-      "sort-by-name": false,
-      "sort-by-coordinates": true,
-      "format": "{icon}",
-      "format-icons": {
-        "11": "1",
-        "12": "2",
-        "13": "3",
-        "14": "4",
-        "15": "5",
-        "16": "6",
-        "17": "7",
-        "18": "8",
-        "19": "9"
-      }
-    }
+    "include": "~/.config/waybar/common.jsonc"
   }
 ]

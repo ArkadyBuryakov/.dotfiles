@@ -2,6 +2,8 @@
 -- Automatically start required services
 -- ##############################################################################
 
+local roles = require("conf/roles")
+
 hl.on("hyprland.start", function()
 	-- Must run before other services so they inherit the session environment
 	hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
@@ -16,8 +18,9 @@ hl.on("hyprland.start", function()
 	-- Notification daemon
 	hl.exec_cmd("mako")
 
-	-- System bar
-	hl.exec_cmd("waybar")
+	-- System bar. Bars are generated per monitor, so it is started through
+	-- the same script that rebuilds them on hotplug.
+	roles.reload_waybar()
 
 	-- Authentication Agent
 	hl.exec_cmd("systemctl --user start hyprpolkitagent")

@@ -1,6 +1,13 @@
-// Shared bar configuration, included by both per-output bars in `config`.
-// In waybar's include merge the including bar's keys win, so anything
-// per-output (currently only ext/workspaces) is defined in `config` instead.
+// Shared bar configuration, included by every bar.
+//
+// Bars themselves are generated per monitor by hypr/scripts/restart-waybar.sh,
+// because which output is the primary and which is the secondary depends on the
+// machine and on what is plugged in (see hypr/conf/roles.lua). `config` next to
+// this file is the static fallback for a bare `waybar` invocation: one bar on
+// every output.
+//
+// In waybar's include merge the including bar's keys win, so a bar overrides
+// the ext/workspaces defaults below to remap the secondary monitor's labels.
 {
   "layer": "top",
   "position": "top",
@@ -25,6 +32,24 @@
     "battery",
     "custom/power"
   ],
+  // Defaults: show the real workspace name. The generated bar for the
+  // secondary monitor overrides `format`/`format-icons` to display its
+  // workspaces 11-19 as 1-9.
+  //
+  // ext/workspaces (ext-workspace-v1 protocol) instead of hyprland/workspaces:
+  // the hyprland module dispatches classic IPC syntax, which the lua-based
+  // hyprland config no longer accepts, so clicks silently failed. Workspaces
+  // 1-9/11-19 are kept persistent compositor-side in hypr/conf/workspaces.lua.
+  //
+  // Sorting: Hyprland sends the numeric workspace id via the coordinates event
+  // (it never sends workspace_id, and name-sorting falls back to lexicographic
+  // because special:* names are non-numeric).
+  "ext/workspaces": {
+    "on-click": "activate",
+    "sort-by-name": false,
+    "sort-by-coordinates": true,
+    "format": "{name}"
+  },
   "cpu": {
     "interval": 5,
     "format": " {usage}%",

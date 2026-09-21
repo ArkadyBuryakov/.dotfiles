@@ -116,7 +116,7 @@ nix
 direnv
 qemu-full
 gnome-calculator
-tldr
+tealdeer
 snapshot
 microsoft-azure-vpn-client-bin
 google-chrome

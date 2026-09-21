@@ -13,6 +13,20 @@ for dir in "${CONFIG_DIRS[@]}"; do
   echo "==> Linked $CONFIG_DIR/$dir"
 done
 
+# Symlink individual config files (repo path -> ~/.config path)
+CONFIG_FILES=(
+  "kde/kglobalshortcutsrc:kglobalshortcutsrc"
+)
+
+for entry in "${CONFIG_FILES[@]}"; do
+  src="${entry%%:*}"
+  dest="${entry#*:}"
+  mkdir -p "$(dirname "$CONFIG_DIR/$dest")"
+  rm -rf "$CONFIG_DIR/$dest"
+  ln -sfn "$DOTFILES/$src" "$CONFIG_DIR/$dest"
+  echo "==> Linked $CONFIG_DIR/$dest"
+done
+
 # Symlink home dotfiles
 for file in "$DOTFILES/home/".*; do
   name="$(basename "$file")"

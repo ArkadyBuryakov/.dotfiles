@@ -2,6 +2,8 @@
 -- Workspace Layouts settings
 -- ##############################################################################
 
+local roles = require("conf/roles")
+
 hl.config({
 	general = {
 		-- Set default layout
@@ -31,44 +33,49 @@ hl.config({
 })
 
 -- Monitor bindings
+-- Roles rather than output names: this config is shared between machines whose
+-- screens are called different things (see conf/roles.lua).
 -- 1-9/11-19 are persistent so they always exist in the compositor: waybar's
 -- ext/workspaces module renders only live ext-workspace-v1 entries and has no
 -- bar-side persistent-workspaces option like hyprland/workspaces had.
--- 11-19 are persistent only while DP-1 is connected, otherwise they'd get
--- moved to eDP-1 and clutter the laptop bar with a second set of buttons.
-for i = 1, 10 do
-	hl.workspace_rule({ workspace = tostring(i), monitor = "eDP-1", default = (i == 1), persistent = (i <= 9) })
-end
+-- 11-19 are persistent only while the secondary monitor is connected,
+-- otherwise they'd get moved to the primary and clutter its bar with a second
+-- set of buttons.
+local function apply_monitor_bindings()
+	local r = roles.resolve()
 
-local function dp1_workspace_rules(connected)
+	for i = 1, 10 do
+		hl.workspace_rule({
+			workspace = tostring(i),
+			monitor = r.primary,
+			default = (i == 1),
+			persistent = (r.primary ~= nil and i <= 9),
+		})
+	end
+
 	for i = 11, 20 do
 		hl.workspace_rule({
 			workspace = tostring(i),
-			monitor = "DP-1",
+			monitor = r.secondary,
 			default = (i == 11),
-			persistent = (connected and i <= 19),
+			persistent = (r.secondary_connected and i <= 19),
 		})
 	end
 end
 
-dp1_workspace_rules(hl.get_monitor("DP-1") ~= nil)
+apply_monitor_bindings()
 
--- waybar's ext/workspaces module keeps stale buttons when workspaces switch
--- groups on hotplug (11-19 linger on the eDP-1 bar after DP-1 reconnects),
--- so restart it once the compositor state has settled.
-hl.on("monitor.added", function(mon)
-	if mon.name == "DP-1" then
-		dp1_workspace_rules(true)
-		hl.exec_cmd("~/.config/hypr/scripts/restart-waybar.sh")
-	end
-end)
+-- Hotplug changes which output holds which role, and waybar's ext/workspaces
+-- module keeps stale buttons when workspaces switch groups (11-19 linger on the
+-- primary bar after the secondary reconnects), so rebind and rebuild the bars
+-- once the compositor state has settled.
+local function on_monitor_change()
+	apply_monitor_bindings()
+	roles.reload_waybar()
+end
 
-hl.on("monitor.removed", function(mon)
-	if mon.name == "DP-1" then
-		dp1_workspace_rules(false)
-		hl.exec_cmd("~/.config/hypr/scripts/restart-waybar.sh")
-	end
-end)
+hl.on("monitor.added", on_monitor_change)
+hl.on("monitor.removed", on_monitor_change)
 
 -- Workspace rules
 hl.workspace_rule({ workspace = "special:magic", on_created_empty = "Telegram & gtk-launch org.arkady.todo.desktop" })

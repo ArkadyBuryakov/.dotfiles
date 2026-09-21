@@ -79,8 +79,8 @@ bindkey '^[[A' history-search-backward
 bindkey '^[[B' history-search-forward
 
 # User-defined env variables
-export XDG_PICTURES_DIR='/home/arkady/Pictures/'
-export HYPRSHOT_DIR='/home/arkady/Pictures/Screenshots/'
+export XDG_PICTURES_DIR="$HOME/Pictures/"
+export HYPRSHOT_DIR="$HOME/Pictures/Screenshots/"
 
 # Shell integrations
 eval "$(fzf --zsh)"
@@ -152,13 +152,13 @@ nav_to_vim() {
 }
 alias nv="nav_to_vim"
 
-source ~/.zshrc_paths
+[[ ! -f ~/.zshrc_paths ]] || source ~/.zshrc_paths
 
 # NPM
 export npm_config_prefix="$HOME/.local"
 
 # pnpm
-export PNPM_HOME="/home/arkady/.local/share/pnpm"
+export PNPM_HOME="$HOME/.local/share/pnpm"
 case ":$PATH:" in
   *":$PNPM_HOME:"*) ;;
   *) export PATH="$PNPM_HOME:$PATH" ;;
@@ -177,10 +177,10 @@ eval "$(pyenv init - zsh)"
 
 # AsyncAPI CLI Autocomplete
 
-ASYNCAPI_AC_ZSH_SETUP_PATH=/home/arkady/.cache/@asyncapi/cli/autocomplete/zsh_setup && test -f $ASYNCAPI_AC_ZSH_SETUP_PATH && source $ASYNCAPI_AC_ZSH_SETUP_PATH; # asyncapi autocomplete setup
+ASYNCAPI_AC_ZSH_SETUP_PATH=$HOME/.cache/@asyncapi/cli/autocomplete/zsh_setup && test -f $ASYNCAPI_AC_ZSH_SETUP_PATH && source $ASYNCAPI_AC_ZSH_SETUP_PATH; # asyncapi autocomplete setup
 
 # bun completions
-[ -s "/home/arkady/.bun/_bun" ] && source "/home/arkady/.bun/_bun"
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 # bun
 export BUN_INSTALL="$HOME/.bun"

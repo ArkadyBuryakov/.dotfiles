@@ -2,6 +2,8 @@
 -- Hotkeys
 -- ##############################################################################
 
+local roles = require("conf/roles")
+
 local mainMod = "SUPER"
 
 -- Default programs
@@ -38,7 +40,9 @@ bindp(mainMod .. " + bracketright", hl.dsp.group.next())
 bindp(mainMod .. " + SHIFT + bracketleft", hl.dsp.group.move_window({ forward = false }))
 bindp(mainMod .. " + SHIFT + bracketright", hl.dsp.group.move_window({ forward = true }))
 bindp("f11", hl.dsp.window.fullscreen())
-bindp(mainMod .. " + R", hl.dsp.exec_cmd("~/.config/hypr/scripts/workspace_reassign.sh"))
+bindp(mainMod .. " + R", function()
+	roles.reassign_workspaces()
+end)
 bindp(mainMod .. " + N", hl.dsp.exec_cmd('~/.config/hypr/scripts/toggle_vpn.sh "Personal DE"'))
 bindp(mainMod .. " + SHIFT + N", hl.dsp.exec_cmd('~/.config/hypr/scripts/toggle_vpn.sh "Personal RU"'))
 bindp(mainMod .. " + D", hl.dsp.exec_cmd("~/.config/hypr/scripts/toggle_dnd.sh"))
