@@ -1,0 +1,44 @@
+#!/bin/bash
+# NetworkManager dispatcher: make charon-nm exit once a VPN goes down, so the
+# next connect gets a fresh one.
+#
+# strongSwan 6.1.0 + networkmanager-strongswan 1.6.4: a few minutes after a
+# strongSwan VPN drops, NetworkManager SIGTERMs the idle charon-nm. charon-nm
+# logs "SIGTERM received, shutting down", unregisters its D-Bus object
+# /org/freedesktop/NetworkManager/VPN/Plugin, tears down all but 4 threads --
+# and then never exits, while still owning the bus name
+# org.freedesktop.NetworkManager.strongswan. NetworkManager sees the name owned,
+# so it never spawns a replacement and reuses the dead plugin. Every later
+# activation then fails immediately with:
+#
+#   plugin NeedSecrets request #1 failed: GDBus.Error:...UnknownMethod:
+#   Object does not exist at path "/org/freedesktop/NetworkManager/VPN/Plugin"
+#
+# That is why the first connect after boot works and every one after it fails.
+# A single charon-nm serves every strongSwan connection, so one wedged process
+# takes out Personal DE and Personal RU together.
+#
+# Once wedged the process ignores SIGTERM, so SIGKILL is the fallback. Killing
+# it here is the normal exit path from NetworkManager's point of view: it reaps
+# the child and spawns a new one on the next activation.
+#
+# Lives in no-wait.d because it calls nmcli and sleeps; NetworkManager must not
+# block on it.
+set -u
+
+[ "${2:-}" = "vpn-down" ] || exit 0
+pgrep -x charon-nm >/dev/null || exit 0
+
+# Leave charon-nm alone while some other VPN is still up: it may be a second
+# strongSwan connection that this same process is serving.
+if nmcli -g UUID,TYPE connection show --active 2>/dev/null |
+    awk -F: -v self="${CONNECTION_UUID:-}" '$2 == "vpn" && $1 != self { found = 1 } END { exit !found }'; then
+    exit 0
+fi
+
+pkill -x charon-nm
+for _ in $(seq 12); do
+    sleep 0.25
+    pgrep -x charon-nm >/dev/null || exit 0
+done
+pkill -KILL -x charon-nm

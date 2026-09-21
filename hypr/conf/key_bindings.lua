@@ -31,7 +31,11 @@ bindp(mainMod .. " + escape", hl.dsp.exec_cmd("hyprlock"))
 bindp(mainMod .. " + SHIFT + escape", hl.dsp.exec_cmd("pkill wlogout || wlogout"))
 bindp(mainMod .. " + V", hl.dsp.window.float({ action = "toggle" }))
 bindp(mainMod .. " + SHIFT + V", hl.dsp.window.pin())
-bindp(mainMod .. " + SUPER_L", hl.dsp.exec_cmd("pkill " .. menu .. " || { ~/.config/rofi/scan-projects.sh; " .. menu .. " -show drun; }"), { release = true })
+bindp(
+	mainMod .. " + SUPER_L",
+	hl.dsp.exec_cmd("pkill " .. menu .. " || { ~/.config/rofi/scan-projects.sh; " .. menu .. " -show drun; }"),
+	{ release = true }
+)
 -- bindp(mainMod .. " + W", hl.dsp.layout("togglesplit")) -- dwindle
 bindp(mainMod .. " + G", hl.dsp.group.toggle())
 bindp(mainMod .. " + SHIFT + G", hl.dsp.group.lock_active({ action = "toggle" }))
@@ -62,7 +66,10 @@ local shotDir = "$HOME/Pictures/Screenshots"
 local shot = "mkdir -p " .. shotDir .. " && XDG_SCREENSHOTS_DIR=" .. shotDir .. " "
 bindp("Print", hl.dsp.exec_cmd(shot .. "~/.config/hypr/scripts/grimblast-sharp --notify --freeze copysave area"))
 bindp("SHIFT + Print", hl.dsp.exec_cmd(shot .. "grimblast --notify --cursor copysave output"))
-bindp(mainMod .. " + P", hl.dsp.exec_cmd(shot .. "~/.config/hypr/scripts/grimblast-sharp --notify --freeze copysave area"))
+bindp(
+	mainMod .. " + P",
+	hl.dsp.exec_cmd(shot .. "~/.config/hypr/scripts/grimblast-sharp --notify --freeze copysave area")
+)
 bindp(mainMod .. " + CTRL + P", hl.dsp.exec_cmd(shot .. "grimblast --notify --cursor copysave active"))
 bindp(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd(shot .. "grimblast --notify --cursor copysave output"))
 bindp(mainMod .. " + ALT + P", hl.dsp.exec_cmd("pkill kooha || kooha"))
@@ -80,7 +87,7 @@ bindp("xf86audiomute", hl.dsp.exec_cmd("~/.config/hypr/scripts/volume.sh toggle"
 bindp("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"))
 bindp("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"))
 bindp("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"))
-bindp(mainMod .. " + SHIFT + f23", hl.dsp.exec_cmd('zen-browser --new-window "https://t3.chat"'))
+bindp(mainMod .. " + SHIFT + f23", hl.dsp.exec_cmd('zen-browser --new-window "https://claude.ai/new"'))
 
 -- Move focus with mainMod + arrow keys
 bindp(mainMod .. " + h", hl.dsp.focus({ direction = "left" }))
