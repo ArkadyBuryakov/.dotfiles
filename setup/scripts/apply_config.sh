@@ -41,6 +41,20 @@ for entry in "${CONFIG_FILES[@]}"; do
   echo "==> Linked $CONFIG_DIR/$dest"
 done
 
+# systemd user drop-ins. These override packaged units without touching
+# /usr/lib, which is how the notification daemons are kept apart: see
+# systemd/user/mako.service.d/hyprland-only.conf.
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+mkdir -p "$SYSTEMD_USER_DIR"
+for dropin in "$DOTFILES/systemd/user/"*.d; do
+  name="$(basename "$dropin")"
+  rm -rf "$SYSTEMD_USER_DIR/$name"
+  ln -sfn "${dropin%/}" "$SYSTEMD_USER_DIR/$name"
+  echo "==> Linked $SYSTEMD_USER_DIR/$name"
+done
+systemctl --user daemon-reload
+echo "==> Reloaded systemd user units"
+
 # Symlink home dotfiles
 for file in "$DOTFILES/home/".*; do
   name="$(basename "$file")"
