@@ -1,8 +1,9 @@
 [Desktop Entry]
 Name=Shutdown
 Exec=systemctl poweroff
-Categories=Session Management
-Icon=~/.config/wlogout/icons/shutdown.png
+Categories=System;
+Icon=org.arkady.shutdown
+OnlyShowIn=Hyprland;
 Version=1.0
 Type=Application
 Terminal=false

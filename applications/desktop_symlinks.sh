@@ -99,3 +99,24 @@ for file in *.desktop; do
     echo "Created symlink for '$file'."
   fi
 done
+
+# --- Icons -------------------------------------------------------------
+# Mirror ../icons/hicolor into the user icon theme so .desktop files can
+# refer to icons by bare name (Icon=org.arkady.foo) instead of by an
+# absolute path, which would hardcode $HOME into the repo.
+ICON_SRC="$(cd "$(dirname "$0")/../icons/hicolor" && pwd)"
+ICON_DEST="$HOME/.local/share/icons/hicolor"
+
+if [ -d "$ICON_SRC" ]; then
+  while IFS= read -r -d '' icon; do
+    rel="${icon#"$ICON_SRC"/}"
+    mkdir -p "$ICON_DEST/$(dirname "$rel")"
+    ln -sfn "$icon" "$ICON_DEST/$rel"
+  done < <(find "$ICON_SRC" \( -type l -o -type f \) -print0)
+  echo "Installed icons into '$ICON_DEST'."
+fi
+
+# Refresh the caches so the new entries/icons are picked up immediately.
+command -v update-desktop-database >/dev/null && update-desktop-database "$TARGET_DIR"
+command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -f -t "$ICON_DEST" 2>/dev/null
+command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 --noincremental 2>/dev/null

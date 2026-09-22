@@ -2,8 +2,9 @@
 Name=Virtual Machines
 Comment=Pick a virtual machine and connect to it
 Exec=vm menu
-Icon=/home/arkady/Documents/.dotfiles/icons/Apps/Common/terminal.png
-Categories=System;Virtualization;
+Icon=org.arkady.vm
+OnlyShowIn=Hyprland;
+Categories=System;
 Version=1.0
 Type=Application
 Terminal=false

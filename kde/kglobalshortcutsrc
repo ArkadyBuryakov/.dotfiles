@@ -275,6 +275,9 @@ toggle do not disturb=none,none,Toggle do not disturb
 [services][kitty.desktop]
 _launch=Meta+T
 
+[services][org.kde.dolphin.desktop]
+_launch=Meta+E\tMeta+F
+
 [services][org.kde.plasma-systemmonitor.desktop]
 _launch=Ctrl+Shift+Esc
 

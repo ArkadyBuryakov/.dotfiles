@@ -340,7 +340,7 @@ render_compose() {
 
 write_desktop_entry() {
   install -d "$DESKTOP_DIR"
-  local icon="$HOME/Documents/.dotfiles/icons/Apps/Common/terminal.png"
+  local icon="org.arkady.vm"
   [[ $KIND == windows ]] && icon="windows"
 
   cat >"$DESKTOP_DIR/org.arkady.vm-$NAME.desktop" <<EOF

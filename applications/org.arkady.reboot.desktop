@@ -1,8 +1,9 @@
 [Desktop Entry]
 Name=Reboot
 Exec=systemctl reboot
-Categories=Session Management
-Icon=~/.config/wlogout/icons/reboot.png
+Categories=System;
+Icon=org.arkady.reboot
+OnlyShowIn=Hyprland;
 Version=1.0
 Type=Application
 Terminal=false

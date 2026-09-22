@@ -1,8 +1,9 @@
 [Desktop Entry]
 Name=Hibernate
 Exec=systemctl hibernate
-Categories=Session Management
-Icon=~/.config/wlogout/icons/hibernate.png
+Categories=System;
+Icon=org.arkady.hibernate
+OnlyShowIn=Hyprland;
 Version=1.0
 Type=Application
 Terminal=false

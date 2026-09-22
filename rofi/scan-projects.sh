@@ -11,7 +11,7 @@ shopt -s nullglob
 PROJECTS_DIR="$HOME/Projects"
 APPS_DIR="$HOME/.local/share/applications"
 PREFIX="org.arkady.project."
-ICON="$HOME/.local/share/icons/Apps/Common/editor.png"
+ICON="org.arkady.project"
 SESSION="$HOME/.config/kitty/dev.session"
 
 # my_project-name -> My Project Name

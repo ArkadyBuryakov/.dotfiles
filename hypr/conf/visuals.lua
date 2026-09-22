@@ -14,7 +14,7 @@ hl.on("hyprland.start", function()
 
 	-- Apply dark theme
 	hl.exec_cmd('gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"') -- for GTK4 apps
-	hl.exec_cmd('gsettings set org.gnome.desktop.interface gtk-theme "adw-gtk3-dark"') -- for GTK3 apps
+	hl.exec_cmd('gsettings set org.gnome.desktop.interface gtk-theme "Breeze"') -- for GTK3 apps
 end)
 
 -- Set QT style

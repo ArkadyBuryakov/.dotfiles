@@ -1,8 +1,9 @@
 [Desktop Entry]
 Name=Logout
-Exec=sh -c 'loginctl terminate-user $USER'
-Categories=Session Management
-Icon=~/.config/wlogout/icons/logout.png
+Exec=sh -c "loginctl terminate-user \\$USER"
+Categories=System;
+Icon=org.arkady.logout
+OnlyShowIn=Hyprland;
 Version=1.0
 Type=Application
 Terminal=false
