@@ -29,6 +29,7 @@ echo "==> Linked $CONFIG_DIR/wlogout (icons -> icons/hicolor/512x512/apps)"
 # Symlink individual config files (repo path -> ~/.config path)
 CONFIG_FILES=(
   "kde/kglobalshortcutsrc:kglobalshortcutsrc"
+  "kde/kxkbrc:kxkbrc"
 )
 
 for entry in "${CONFIG_FILES[@]}"; do
