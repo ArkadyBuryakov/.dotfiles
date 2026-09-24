@@ -30,6 +30,7 @@ echo "==> Linked $CONFIG_DIR/wlogout (icons -> icons/hicolor/512x512/apps)"
 CONFIG_FILES=(
   "kde/kglobalshortcutsrc:kglobalshortcutsrc"
   "kde/kxkbrc:kxkbrc"
+  "teams-for-linux/config.json:teams-for-linux/config.json"
 )
 
 for entry in "${CONFIG_FILES[@]}"; do
