@@ -1,1 +1,8 @@
 .idea/
+
+# icons/hicolor is ~/.local/share/icons/hicolor: apps (Steam, Lutris, Wine, Chrome...)
+# drop their icons here. Only track our own org.arkady.* icons.
+icons/hicolor/**
+!icons/hicolor/*/
+!icons/hicolor/*/*/
+!icons/hicolor/*/*/org.arkady.*
