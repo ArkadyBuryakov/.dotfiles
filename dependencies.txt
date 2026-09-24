@@ -83,7 +83,6 @@ rofi
 silicon
 slack-desktop
 snappy
-storageexplorer
 strongswan
 swappy
 teams-for-linux
