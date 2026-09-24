@@ -14,6 +14,6 @@ return {
   opts = {
     -- configuration goes here
     -- lang = "golang",
-    lang = "python",
+    lang = "typescript",
   },
 }
