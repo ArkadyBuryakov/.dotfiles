@@ -30,9 +30,20 @@ return {
         window = {
           mappings = {
             ["o"] = "system_open",
+            ["O"] = "file_manager_open",
           },
         },
         commands = {
+          -- Open directory (or reveal file) in the default GUI file manager
+          file_manager_open = function(state)
+            local node = state.tree:get_node()
+            local method = node.type == "directory" and "ShowFolders" or "ShowItems"
+            vim.fn.jobstart({
+              "busctl", "--user", "call",
+              "org.freedesktop.FileManager1", "/org/freedesktop/FileManager1", "org.freedesktop.FileManager1",
+              method, "ass", "1", vim.uri_from_fname(node:get_id()), "",
+            }, { detach = true })
+          end,
           system_open = function(state)
             local node = state.tree:get_node()
             local path = node:get_id()

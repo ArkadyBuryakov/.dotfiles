@@ -20,6 +20,8 @@ return {
       inlay_hints = { enabled = false },
       servers = {
         basedpyright = {
+          -- uv workspaces: root at uv.lock (where .venv lives), not the member's pyproject.toml
+          root_markers = { "uv.lock", { "pyrightconfig.json", "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", ".git" } },
           settings = {
             basedpyright = {
               analysis = {

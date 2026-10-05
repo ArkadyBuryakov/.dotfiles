@@ -24,6 +24,7 @@ sudo -v
 if [[ $mode == --remove ]]; then
     for s in "${SCRIPTS[@]}"; do
         sudo rm -f "$DEST/$s"
+        [[ $s == no-wait.d/* ]] && sudo rm -f "$DEST/${s#no-wait.d/}"
     done
     echo "==> Removed ${SCRIPTS[*]} from $DEST"
     exit 0
@@ -34,6 +35,11 @@ fi
 for s in "${SCRIPTS[@]}"; do
     bash -n "$SRC/dispatcher.d/$s"
     sudo install -D -m755 -o root -g root "$SRC/dispatcher.d/$s" "$DEST/$s"
+    # no-wait.d is not scanned on its own: a script there only runs through a
+    # symlink in dispatcher.d pointing at it.
+    if [[ $s == no-wait.d/* ]]; then
+        sudo ln -sfn "$s" "$DEST/${s#no-wait.d/}"
+    fi
 done
 sudo systemctl enable NetworkManager-dispatcher.service
 

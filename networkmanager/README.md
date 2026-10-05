@@ -1,6 +1,7 @@
 # NetworkManager
 
-Dispatcher scripts installed into `/etc/NetworkManager/dispatcher.d/`.
+Dispatcher scripts installed into `/etc/NetworkManager/dispatcher.d/`. Scripts in
+`no-wait.d/` only run through a symlink in `dispatcher.d/`; the installer creates it.
 
 ```sh
 bash networkmanager/apply-networkmanager.sh            # install

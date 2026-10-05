@@ -65,17 +65,9 @@ end
 
 apply_monitor_bindings()
 
--- Hotplug changes which output holds which role, and waybar's ext/workspaces
--- module keeps stale buttons when workspaces switch groups (11-19 linger on the
--- primary bar after the secondary reconnects), so rebind and rebuild the bars
--- once the compositor state has settled.
-local function on_monitor_change()
-	apply_monitor_bindings()
-	roles.reload_waybar()
-end
-
-hl.on("monitor.added", on_monitor_change)
-hl.on("monitor.removed", on_monitor_change)
+-- Hotplug changes which output holds which role, so rebind.
+hl.on("monitor.added", apply_monitor_bindings)
+hl.on("monitor.removed", apply_monitor_bindings)
 
 -- Workspace rules
 hl.workspace_rule({ workspace = "special:magic", on_created_empty = "Telegram & gtk-launch org.arkady.todo.desktop" })

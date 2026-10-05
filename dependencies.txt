@@ -12,6 +12,7 @@ bibata-cursor-theme
 blender
 bluetuith
 bluez-obex
+breeze-gtk
 brightnessctl
 btop
 bun

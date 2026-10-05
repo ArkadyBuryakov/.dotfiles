@@ -8,11 +8,11 @@
 # the roles and passes them here; either may be empty. Everything except the
 # output-to-role wiring still comes from ~/.config/waybar/common.jsonc.
 #
-# Also used on monitor hotplug: waybar's ext/workspaces module keeps stale
-# workspace buttons when workspaces switch groups (e.g. 11-19 stay on the
+# Also used after reassigning workspaces: waybar's ext/workspaces module keeps
+# stale workspace buttons when workspaces switch groups (e.g. 11-19 stay on the
 # primary bar after the secondary reconnects); a fresh instance binds the
 # protocol anew and renders the compositor's actual state.
-# Debounced via flock: hotplug can fire several events in quick succession.
+# Debounced via flock: callers can fire several times in quick succession.
 # waybar is spawned with the lock fd closed (9>&-), otherwise it inherits it
 # and holds the lock for its whole lifetime, blocking every later restart.
 
