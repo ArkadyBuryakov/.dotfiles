@@ -32,14 +32,14 @@ Threat detected
   │
   ├─► Desktop notification (red border, top-right, 10 min)
   │
-  └─► Waybar icon turns red: 󰃤
+  └─► Bar icon turns red: 󰃤
         │
         ├─ Hover: shows last 5 log entries
         └─ Click: opens kitty sudo nvim /var/log/clamav/threats.log
               │
               └─► Remove resolved lines from the log
                     │
-                    └─► Log empty → Waybar returns to safe icon: 󱏛
+                    └─► Log empty → Bar returns to safe icon: 󱏛
 ```
 
 ## Setup

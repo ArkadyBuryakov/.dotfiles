@@ -80,6 +80,7 @@ pavucontrol
 pnpm
 pyenv
 python
+quickshell
 rofi
 silicon
 slack-desktop
@@ -96,7 +97,6 @@ visual-studio-code-bin
 vlc
 vlc-pugins-all
 w3m
-waybar
 wireplumber
 wl-clipboard
 wlogout

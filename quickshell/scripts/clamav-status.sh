@@ -1,6 +1,6 @@
 #!/bin/bash
-# Waybar custom module: ClamAV threat status
-# Checks /var/log/clamav/threats.log (JSON lines) and outputs JSON for waybar.
+# Bar module (quickshell/Polls.qml): ClamAV threat status
+# Checks /var/log/clamav/threats.log (JSON lines) and outputs {text, tooltip, class} JSON.
 # Shows stale warning when last scan is >30 days ago or never run.
 
 THREATS_LOG="/var/log/clamav/threats.log"

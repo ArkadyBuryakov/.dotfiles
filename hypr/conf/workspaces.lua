@@ -35,9 +35,8 @@ hl.config({
 -- Monitor bindings
 -- Roles rather than output names: this config is shared between machines whose
 -- screens are called different things (see conf/roles.lua).
--- 1-9/11-19 are persistent so they always exist in the compositor: waybar's
--- ext/workspaces module renders only live ext-workspace-v1 entries and has no
--- bar-side persistent-workspaces option like hyprland/workspaces had.
+-- 1-9/11-19 are persistent so they always exist in the compositor: the bar
+-- (quickshell/Workspaces.qml) renders only live workspaces.
 -- 11-19 are persistent only while the secondary monitor is connected,
 -- otherwise they'd get moved to the primary and clutter its bar with a second
 -- set of buttons.

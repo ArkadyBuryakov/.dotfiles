@@ -22,10 +22,10 @@ hl.env("QT_QPA_PLATFORMTHEME", "qt6ct")
 hl.env("QT_QPA_PLATFORM", "wayland")
 hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
 
--- Make waybar transparent with blur effect
+-- Make the bar transparent with blur effect
 hl.layer_rule({
-	name = "waybar rules",
-	match = { namespace = "waybar" },
+	name = "bar rules",
+	match = { namespace = "quickshell-bar" },
 
 	xray = true,
 	blur = true,

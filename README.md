@@ -11,7 +11,7 @@
   - hyprlock - lock screen
   - hypridle - idle manager
 - kitty - terminal emulator
-- waybar - status bar
+- quickshell - status bar
 - rofi - application launcher
 - mako - notification daemon
 - wlogout - logout menu

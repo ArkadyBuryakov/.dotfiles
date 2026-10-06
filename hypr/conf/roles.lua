@@ -67,18 +67,6 @@ function M.resolve()
 	return { primary = primary, secondary = secondary, secondary_connected = secondary_connected }
 end
 
---- Start or restart waybar with a bar per connected monitor for the current roles.
-function M.reload_waybar()
-	local r = M.resolve()
-	hl.exec_cmd(
-		string.format(
-			"~/.config/hypr/scripts/restart-waybar.sh '%s' '%s'",
-			r.primary or "",
-			r.secondary_connected and r.secondary or ""
-		)
-	)
-end
-
 --- Move workspaces 1-9/11-19 back onto the monitor their role owns.
 function M.reassign_workspaces()
 	local r = M.resolve()
@@ -94,9 +82,6 @@ function M.reassign_workspaces()
 
 	move(1, 10, r.primary)
 	move(11, 20, r.secondary_connected and r.secondary or r.primary)
-
-	-- Cross-group moves leave stale buttons in waybar's ext/workspaces module
-	M.reload_waybar()
 end
 
 return M

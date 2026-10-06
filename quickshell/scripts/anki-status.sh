@@ -1,5 +1,5 @@
 #!/bin/bash
-# Waybar custom module: Anki due card count
+# Bar module (quickshell/Polls.qml): Anki due card count
 # Uses apy to sync and query. Syncs only when Anki GUI is not running (DB lock).
 
 # Sync with AnkiWeb if Anki is not running
