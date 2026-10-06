@@ -1,3 +1,37 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/jesseduffield/lazygit/master/schema/config.json
+
+gui:
+  # Square frames, like the rofi/mako/quickshell surfaces
+  border: single
+  # Colours from the kitty palette (kitty/themes/Neutron_custom.conf)
+  theme:
+    activeBorderColor:
+      - "#6A7B92"
+      - bold
+    inactiveBorderColor:
+      - "#454B55"
+    searchingActiveBorderColor:
+      - "#DDB566"
+      - bold
+    optionsTextColor:
+      - "#6A7B92"
+    # The darker selection shade rather than the accent: rows keep their own
+    # red/green/blue text, which would not read on a mid-tone background
+    selectedLineBgColor:
+      - "#2E353D"
+    cherryPickedCommitFgColor:
+      - "#1B1D22"
+    cherryPickedCommitBgColor:
+      - "#3F93A8"
+    markedBaseCommitFgColor:
+      - "#1B1D22"
+    markedBaseCommitBgColor:
+      - "#DDB566"
+    unstagedChangesColor:
+      - "#B53F36"
+    defaultFgColor:
+      - "#E6E8EE"
+
 git:
   diffRenderers:
     - command: delta --paging=never

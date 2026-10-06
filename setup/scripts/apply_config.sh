@@ -31,6 +31,8 @@ CONFIG_FILES=(
   "kde/kglobalshortcutsrc:kglobalshortcutsrc"
   "kde/kxkbrc:kxkbrc"
   "teams-for-linux/config.json:teams-for-linux/config.json"
+  "btop/themes/neutron.theme:btop/themes/neutron.theme"
+  "k9s/skins/neutron.yaml:k9s/skins/neutron.yaml"
 )
 
 for entry in "${CONFIG_FILES[@]}"; do
@@ -41,6 +43,23 @@ for entry in "${CONFIG_FILES[@]}"; do
   ln -sfn "$DOTFILES/$src" "$CONFIG_DIR/$dest"
   echo "==> Linked $CONFIG_DIR/$dest"
 done
+
+# btop rewrites its config on exit, so the file itself is not tracked: only
+# the theme is linked (above), and selected here.
+BTOP_CONF="$CONFIG_DIR/btop/btop.conf"
+touch "$BTOP_CONF"
+sed -i '/^color_theme = /d' "$BTOP_CONF"
+echo 'color_theme = "neutron"' >>"$BTOP_CONF"
+echo "==> Selected btop theme neutron"
+
+# Same for k9s: it rewrites config.yaml itself, so only the skin is tracked.
+K9S_CONF="$CONFIG_DIR/k9s/config.yaml"
+if [[ -f "$K9S_CONF" ]] && grep -q '^  ui:$' "$K9S_CONF"; then
+  sed -i -e '/^    skin: /d' -e 's/^  ui:$/  ui:\n    skin: neutron/' "$K9S_CONF"
+else
+  printf 'k9s:\n  ui:\n    skin: neutron\n' >"$K9S_CONF"
+fi
+echo "==> Selected k9s skin neutron"
 
 # systemd user drop-ins. These override packaged units without touching
 # /usr/lib, which is how the notification daemons are kept apart: see

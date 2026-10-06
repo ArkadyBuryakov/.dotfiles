@@ -2,6 +2,36 @@
 
 gui:
   returnImmediately: true
+  # Square frames, like the rofi/mako/quickshell surfaces
+  border: single
+  # Colour names resolve to the terminal palette, so in kitty these are the
+  # rice colours: blue is the #6A7B92 accent and black the #454B55 grey
+  # (kitty/themes/Neutron_custom.conf).
+  theme:
+    activeBorderColor:
+      - blue
+      - bold
+    inactiveBorderColor:
+      - black
+    selectedLineBgColor:
+      - blue
+    optionsTextColor:
+      - blue
+  # Square frames, like the rofi/mako/quickshell surfaces
+  border: single
+  # lazydocker takes colour names only. They resolve to the terminal palette,
+  # so in kitty these are the rice colours: blue is the #6A7B92 accent and
+  # black the #454B55 grey (kitty/themes/Neutron_custom.conf).
+  theme:
+    activeBorderColor:
+      - blue
+      - bold
+    inactiveBorderColor:
+      - black
+    selectedLineBgColor:
+      - blue
+    optionsTextColor:
+      - blue
 
 customCommands:
   containers:

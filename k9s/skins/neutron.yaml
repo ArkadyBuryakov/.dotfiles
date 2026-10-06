@@ -1,0 +1,111 @@
+# k9s skin following the rest of the rice: the kitty palette
+# (kitty/themes/Neutron_custom.conf) and the flat, accent-on-dark look of the
+# rofi/mako/quickshell surfaces.
+
+foreground: &foreground "#E6E8EE"
+# The terminal's own background, which is the palette's #1B1D22 in kitty
+background: &background default
+dark: &dark "#1B1D22"
+selection: &selection "#2E353D"
+grey: &grey "#454B55"
+accent: &accent "#6A7B92"
+red: &red "#B53F36"
+green: &green "#5AB977"
+yellow: &yellow "#DDB566"
+magenta: &magenta "#A3799D"
+cyan: &cyan "#3F93A8"
+
+k9s:
+  body:
+    fgColor: *foreground
+    bgColor: *background
+    logoColor: *accent
+  prompt:
+    fgColor: *foreground
+    bgColor: *background
+    suggestColor: *accent
+    border:
+      default: *accent
+      command: *yellow
+  info:
+    fgColor: *foreground
+    sectionColor: *accent
+  dialog:
+    fgColor: *foreground
+    bgColor: *background
+    buttonFgColor: *foreground
+    buttonBgColor: *selection
+    buttonFocusFgColor: *foreground
+    buttonFocusBgColor: *accent
+    labelFgColor: *accent
+    fieldFgColor: *foreground
+  frame:
+    border:
+      fgColor: *grey
+      focusColor: *accent
+    menu:
+      fgColor: *foreground
+      keyColor: *yellow
+      numKeyColor: *yellow
+    crumbs:
+      fgColor: *foreground
+      bgColor: *selection
+      activeColor: *accent
+    status:
+      newColor: *cyan
+      modifyColor: *magenta
+      addColor: *green
+      errorColor: *red
+      highlightColor: *yellow
+      killColor: *magenta
+      completedColor: *accent
+    title:
+      fgColor: *foreground
+      bgColor: *background
+      highlightColor: *yellow
+      counterColor: *accent
+      filterColor: *cyan
+  views:
+    charts:
+      bgColor: *background
+      defaultDialColors:
+        - *accent
+        - *red
+      defaultChartColors:
+        - *accent
+        - *red
+    table:
+      fgColor: *foreground
+      bgColor: *background
+      # Accent row with light text, like rofi's selected entry
+      cursorFgColor: *foreground
+      cursorBgColor: *accent
+      markColor: *yellow
+      header:
+        fgColor: *foreground
+        bgColor: *background
+        sorterColor: *yellow
+    xray:
+      fgColor: *foreground
+      bgColor: *background
+      cursorColor: *accent
+      graphicColor: *accent
+      showIcons: false
+    yaml:
+      keyColor: *accent
+      colonColor: *grey
+      valueColor: *foreground
+    logs:
+      fgColor: *foreground
+      bgColor: *background
+      indicator:
+        fgColor: *foreground
+        bgColor: *selection
+        toggleOnColor: *green
+        toggleOffColor: *accent
+  help:
+    fgColor: *foreground
+    bgColor: *background
+    keyColor: *yellow
+    numKeyColor: *yellow
+    sectionColor: *accent

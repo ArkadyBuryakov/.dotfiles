@@ -1,0 +1,89 @@
+# btop theme following the rest of the rice: the kitty palette
+# (kitty/themes/Neutron_custom.conf) and the flat, accent-on-dark look of the
+# rofi/mako/quickshell surfaces.
+#
+# Load figures run accent -> yellow -> red, like the gauges in the bar.
+
+# Main background, empty for terminal default
+theme[main_bg]="#1B1D22"
+
+# Main text color
+theme[main_fg]="#E6E8EE"
+
+# Title color for boxes
+theme[title]="#E6E8EE"
+
+# Highlight color for keyboard shortcuts
+theme[hi_fg]="#DDB566"
+
+# Background color of selected item in processes box
+theme[selected_bg]="#6A7B92"
+
+# Foreground color of selected item in processes box
+theme[selected_fg]="#E6E8EE"
+
+# Color of inactive/disabled text
+theme[inactive_fg]="#454B55"
+
+# Color of text appearing on top of graphs, i.e uptime and current network graph scaling
+theme[graph_text]="#6A7B92"
+
+# Background color of the percentage meters
+theme[meter_bg]="#2E353D"
+
+# Misc colors for processes box including mini cpu graphs, details memory graph and details status text
+theme[proc_misc]="#6A7B92"
+
+# Box outline colors
+theme[cpu_box]="#6A7B92"
+theme[mem_box]="#6A7B92"
+theme[net_box]="#6A7B92"
+theme[proc_box]="#6A7B92"
+
+# Box divider line and small boxes line color
+theme[div_line]="#454B55"
+
+# Temperature graph colors
+theme[temp_start]="#6A7B92"
+theme[temp_mid]="#DDB566"
+theme[temp_end]="#B53F36"
+
+# CPU graph colors
+theme[cpu_start]="#6A7B92"
+theme[cpu_mid]="#DDB566"
+theme[cpu_end]="#B53F36"
+
+# Mem/Disk free meter
+theme[free_start]="#5AB977"
+theme[free_mid]=""
+theme[free_end]=""
+
+# Mem/Disk cached meter
+theme[cached_start]="#3F93A8"
+theme[cached_mid]=""
+theme[cached_end]=""
+
+# Mem/Disk available meter
+theme[available_start]="#6A7B92"
+theme[available_mid]=""
+theme[available_end]=""
+
+# Mem/Disk used meter
+theme[used_start]="#6A7B92"
+theme[used_mid]="#DDB566"
+theme[used_end]="#B53F36"
+
+# Download graph colors
+theme[download_start]="#3F93A8"
+theme[download_mid]=""
+theme[download_end]=""
+
+# Upload graph colors
+theme[upload_start]="#A3799D"
+theme[upload_mid]=""
+theme[upload_end]=""
+
+# Process box color gradient for threads, mem and cpu usage
+theme[process_start]="#6A7B92"
+theme[process_mid]="#DDB566"
+theme[process_end]="#B53F36"
