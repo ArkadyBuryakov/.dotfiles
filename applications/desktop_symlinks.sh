@@ -108,11 +108,13 @@ ICON_SRC="$(cd "$(dirname "$0")/../icons/hicolor" && pwd)"
 ICON_DEST="$HOME/.local/share/icons/hicolor"
 
 if [ -d "$ICON_SRC" ]; then
-  while IFS= read -r -d '' icon; do
-    rel="${icon#"$ICON_SRC"/}"
+  # Only link icons git doesn't ignore: hicolor also collects icons dropped
+  # there by other apps (see .gitignore), which aren't ours to install.
+  while IFS= read -r -d '' rel; do
+    [ -e "$ICON_SRC/$rel" ] || continue
     mkdir -p "$ICON_DEST/$(dirname "$rel")"
-    ln -sfn "$icon" "$ICON_DEST/$rel"
-  done < <(find "$ICON_SRC" \( -type l -o -type f \) -print0)
+    ln -sfn "$ICON_SRC/$rel" "$ICON_DEST/$rel"
+  done < <(git -C "$ICON_SRC" ls-files -z --cached --others --exclude-standard)
   echo "Installed icons into '$ICON_DEST'."
 fi
 

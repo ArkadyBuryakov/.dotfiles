@@ -1,0 +1,41 @@
+#!/usr/bin/env zsh
+#
+# Create a project, init git and open it in nvim.
+#
+# Usage:
+#   mkproj <name>            -> ~/Projects/Personal/<name>
+#   mkproj <domain> <name>   -> ~/Projects/<domain>/<name> (case-insensitive domain search)
+
+setopt extendedglob
+
+root="$HOME/Projects"
+domain="Personal"
+matches=()
+
+case $# in
+  1) name="$1" ;;
+  2)
+    name="$2"
+    # exact case-insensitive match wins, otherwise fall back to substring
+    matches=("$root"/(#i)"$1"(N/:t))
+    (( $#matches )) || matches=("$root"/(#i)*"$1"*(N/:t))
+    case $#matches in
+      0)
+        read -q "?mkproj: domain '$1' not found. Create it? [y/N] " || { echo; exit 1; }
+        echo
+        domain="$1"
+        ;;
+      1) domain="$matches[1]" ;;
+      *) domain="$(print -l $matches | fzf --height=~40% --prompt='Domain> ')" || exit 1 ;;
+    esac
+    ;;
+  *)
+    echo "usage: mkproj [domain] <project name>" >&2
+    exit 1
+    ;;
+esac
+
+dir="$root/$domain/$name"
+mkdir -p "$dir" && cd "$dir" || exit 1
+[ -d .git ] || git init -q
+exec nvim .
