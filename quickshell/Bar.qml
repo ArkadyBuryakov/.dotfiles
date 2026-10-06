@@ -63,13 +63,13 @@ PanelWindow {
             name: "cpu"
             text: `\u{F4BC} ${SysStats.cpu}%`
             card: SysCard {}
-            onClicked: Quickshell.execDetached(["kitty", "btop"])
+            onClicked: Quickshell.execDetached(["kitty", Quickshell.shellPath("scripts/btop-sorted.sh"), "cpu lazy"])
         }
         Module {
             name: "memory"
             text: `\u{E266} ${SysStats.memory}%`
             card: SysCard {}
-            onClicked: Quickshell.execDetached(["kitty", "btop"])
+            onClicked: Quickshell.execDetached(["kitty", Quickshell.shellPath("scripts/btop-sorted.sh"), "memory"])
         }
         Volume {}
         Network {}
