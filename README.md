@@ -1,8 +1,10 @@
+
+
 # Dotfiles for a simple zenful setup
 
 # TODO
 - finish howdy instruction
-- setup greetd with tui-greet
+- setup greetd with tuigreet
 
 ## Requirements
 
