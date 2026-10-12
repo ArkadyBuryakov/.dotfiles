@@ -6,10 +6,10 @@ gui:
   # Colours from the kitty palette (kitty/themes/Neutron_custom.conf)
   theme:
     activeBorderColor:
-      - "#6A7B92"
+      - "#DDB566"
       - bold
     inactiveBorderColor:
-      - "#454B55"
+      - "#6A7B92"
     searchingActiveBorderColor:
       - "#DDB566"
       - bold

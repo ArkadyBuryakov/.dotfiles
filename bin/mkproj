@@ -1,16 +1,36 @@
 #!/usr/bin/env zsh
 #
 # Create a project, init git and open it in nvim.
-#
-# Usage:
-#   mkproj <name>            -> ~/Projects/Personal/<name>
-#   mkproj <domain> <name>   -> ~/Projects/<domain>/<name> (case-insensitive domain search)
+
+usage() {
+  cat <<EOF
+Create a project, init git and open it in nvim.
+
+Usage:
+  mkproj <name>            -> ~/Projects/Personal/<name>
+  mkproj <domain> <name>   -> ~/Projects/<domain>/<name>
+  mkproj -h | --help       show this help
+
+<name> may be a git url: the repo is then cloned into the domain instead
+of creating an empty project, e.g.
+  mkproj git@github.com:user/repo.git          -> ~/Projects/Personal/repo
+  mkproj sandbox https://github.com/user/repo  -> ~/Projects/Sandbox/repo
+
+The domain is matched case-insensitively: an exact match wins, otherwise
+a substring match is used (fzf picker if several match). An unknown domain
+is created after confirmation.
+EOF
+}
 
 setopt extendedglob
 
 root="$HOME/Projects"
 domain="Personal"
 matches=()
+
+case "$1" in
+  -h|--help) usage; exit 0 ;;
+esac
 
 case $# in
   1) name="$1" ;;
@@ -30,12 +50,23 @@ case $# in
     esac
     ;;
   *)
-    echo "usage: mkproj [domain] <project name>" >&2
+    usage >&2
     exit 1
     ;;
 esac
 
+# a git url instead of a name: clone it, the project is named after the repo
+url=""
+if [[ "$name" == (*://*|*@*:*|*.git) ]]; then
+  url="$name"
+  name="${${${${url%/}%.git}%/}##*[/:]}"
+  [[ -n "$name" ]] || { echo "mkproj: cannot derive project name from '$url'" >&2; exit 1; }
+fi
+
 dir="$root/$domain/$name"
+if [[ -n "$url" && ! -d "$dir" ]]; then
+  mkdir -p "$dir:h" && git clone "$url" "$dir" || exit 1
+fi
 mkdir -p "$dir" && cd "$dir" || exit 1
 [ -d .git ] || git init -q
 exec nvim .

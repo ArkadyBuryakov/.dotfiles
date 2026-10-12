@@ -1,8 +1,23 @@
 return {
   {
     "navarasu/onedark.nvim",
+    init = function()
+      -- `colors` overrides apply to every style, so drop the kitty background when toggled to "light"
+      vim.api.nvim_create_autocmd("ColorSchemePre", {
+        pattern = "onedark",
+        callback = function()
+          local cfg = vim.g.onedark_config
+          if not cfg then
+            return
+          end
+          cfg.colors = cfg.style == "darker" and { bg0 = "#1b1d22" } or vim.empty_dict()
+          vim.g.onedark_config = cfg
+        end,
+      })
+    end,
     opts = {
       style = "darker",
+      colors = { bg0 = "#1b1d22" }, -- match kitty background (kitty/themes/Neutron_custom.conf)
       -- toggle theme style ---
       toggle_style_key = "<leader>Ts", -- keybind to toggle theme style. Leave it nil to disable it, or set it to a string, for example "<leader>ts"
       toggle_style_list = { "light", "darker" }, -- List of styles to toggle between

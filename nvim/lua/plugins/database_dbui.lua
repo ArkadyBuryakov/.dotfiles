@@ -204,8 +204,19 @@ return {
           return "postgres"
         elseif url:match("^duckdb:") then
           return "duckdb"
+        elseif url:match("^clickhouse:") then
+          return "clickhouse"
         end
         return nil
+      end
+
+      -- Build the clickhouse client invocation for a URL via dadbod's adapter
+      -- (host/port/user/password/database flags), running `sql` with the given
+      -- output format. --format takes precedence over a FORMAT clause in the query.
+      local function clickhouse_cmd(url, sql, format)
+        local cmd = vim.fn["db#adapter#dispatch"](vim.fn["db#resolve"](url), "interactive")
+        vim.list_extend(cmd, { "--format", format, "--query", sql })
+        return cmd
       end
 
       -- Extract the database file path from a duckdb: URL (mirrors db#url#file_path).
@@ -234,6 +245,8 @@ return {
           return run({ "psql", url, "-c", "COPY (" .. text .. ") TO STDOUT WITH (FORMAT CSV, HEADER)" })
         elseif kind == "duckdb" then
           return run({ "duckdb", duckdb_path(url), "-c", "COPY (" .. text .. ") TO '/dev/stdout' (FORMAT CSV, HEADER)" })
+        elseif kind == "clickhouse" then
+          return run(clickhouse_cmd(url, text, "CSVWithNames"))
         end
         error("CSV export not supported for this connection: " .. url)
       end
@@ -248,6 +261,9 @@ return {
         elseif kind == "duckdb" then
           local raw = run({ "duckdb", duckdb_path(url), "-c", "COPY (" .. text .. ") TO '/dev/stdout' (FORMAT JSON, ARRAY true)" })
           return run({ "jq", "if length == 1 then .[0] else . end" }, raw)
+        elseif kind == "clickhouse" then
+          local raw = run(clickhouse_cmd(url, text, "JSONEachRow"))
+          return run({ "jq", "-s", "if length == 1 then .[0] else . end" }, raw)
         end
         error("JSON export not supported for this connection: " .. url)
       end
