@@ -107,9 +107,9 @@ Singleton {
                 hl.dispatch(hl.dsp.window.fullscreen({ action = "unset", mode = mode, window = w }))
             end
             if not w.floating then hl.dispatch(hl.dsp.window.float({ action = "enable", window = w })) end
-            if not w.pinned then hl.dispatch(hl.dsp.window.pin({ window = w })) end
-            -- Lets hypr/conf/sidebar.lua find the window
+            -- Lets hypr/conf/sidebar.lua find the window; it does the pinning
             hl.dispatch(hl.dsp.window.tag({ tag = "+sidebar", window = w }))
+            require("conf/sidebar").sync()
             local right = m.x + m.width / m.scale
             local height = m.height / m.scale - m.reserved.top - m.reserved.bottom
             hl.dispatch(hl.dsp.window.resize({
@@ -164,9 +164,8 @@ Singleton {
                     root.forget(monitor);
                 break;
             }
-            // Tiled or unpinned by hand: it is no longer a sidebar
-            case "changefloatingmode":
-            case "pin": {
+            // Tiled by hand: it is no longer a sidebar
+            case "changefloatingmode": {
                 const [address, on] = event.data.split(",");
                 const monitor = name(`0x${address}`);
                 if (monitor && on === "0")

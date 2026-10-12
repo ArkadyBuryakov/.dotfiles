@@ -58,6 +58,49 @@ end)
 hl.on("layer.closed", refresh)
 refresh()
 
+--- Pin the docked windows, except under a fullscreen window.
+---
+--- Pinning is what carries a docked window across workspaces, but Hyprland
+--- also draws pinned windows over fullscreen ones. So a docked window gets
+--- unpinned while its monitor shows a fullscreen window, which leaves it
+--- behind that window, and pinned again once the monitor shows something else.
+function M.sync()
+	for _, dock in ipairs(hl.get_windows({ tag = TAG })) do
+		local monitor = dock.monitor
+		local workspace = monitor and (monitor.active_special_workspace or monitor.active_workspace)
+		local fullscreen = workspace and workspace.fullscreen_mode == 2 and workspace.fullscreen_window
+		local covered = fullscreen and fullscreen.address ~= dock.address
+
+		if covered and dock.pinned then
+			hl.dispatch(hl.dsp.window.pin({ window = dock }))
+			hl.dispatch(hl.dsp.window.alter_zorder({ mode = "bottom", window = dock }))
+		elseif workspace and not covered and not dock.pinned and dock.floating then
+			-- Changing workspace shifts a floating window, so put it back
+			local x, y = dock.at.x, dock.at.y
+			if dock.workspace and dock.workspace.id ~= workspace.id then
+				hl.dispatch(hl.dsp.window.move({ workspace = workspace.id, follow = false, window = dock }))
+			end
+			hl.dispatch(hl.dsp.window.pin({ window = dock }))
+			hl.dispatch(hl.dsp.window.move({ x = x, y = y, window = dock }))
+		end
+	end
+end
+
+-- Not from inside the event: the state it announces may not have settled
+local function sync_later()
+	hl.timer(M.sync, { timeout = 10, type = "oneshot" })
+end
+
+for _, event in ipairs({
+	"window.fullscreen",
+	"window.close",
+	"window.move_to_workspace",
+	"workspace.active",
+	"workspace.special_active",
+}) do
+	hl.on(event, sync_later)
+end
+
 ---@return HL.Window|nil window docked on the monitor
 local function docked_on(monitor)
 	return hl.get_windows({ tag = TAG, monitor = monitor })[1]

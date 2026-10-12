@@ -35,7 +35,7 @@ bindp(mainMod .. " + ALT + B", hl.dsp.exec_cmd("chromium"))
 bindp(mainMod .. " + escape", hl.dsp.exec_cmd("hyprlock"))
 bindp(mainMod .. " + SHIFT + escape", hl.dsp.exec_cmd("pkill wlogout || wlogout"))
 bindp(mainMod .. " + V", hl.dsp.window.float({ action = "toggle" }))
-bindp(mainMod .. " + SHIFT + V", hl.dsp.window.pin())
+bindp(mainMod .. " + SHIFT + V", unless_docked(hl.dsp.window.pin()))
 -- Dock the focused window as a sidebar / release it (quickshell/Sidebar.qml)
 bindp(mainMod .. " + backslash", hl.dsp.exec_cmd("qs ipc call sidebar toggle"))
 bindp(
