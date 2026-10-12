@@ -31,6 +31,8 @@ bindp(mainMod .. " + escape", hl.dsp.exec_cmd("hyprlock"))
 bindp(mainMod .. " + SHIFT + escape", hl.dsp.exec_cmd("pkill wlogout || wlogout"))
 bindp(mainMod .. " + V", hl.dsp.window.float({ action = "toggle" }))
 bindp(mainMod .. " + SHIFT + V", hl.dsp.window.pin())
+-- Dock the focused window as a sidebar / release it (quickshell/Sidebar.qml)
+bindp(mainMod .. " + backslash", hl.dsp.exec_cmd("qs ipc call sidebar toggle"))
 bindp(
 	mainMod .. " + SUPER_L",
 	hl.dsp.exec_cmd("pkill " .. menu .. " || { ~/.config/rofi/scan-projects.sh; " .. menu .. " -show drun; }"),
