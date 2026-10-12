@@ -17,6 +17,9 @@ Singleton {
     readonly property int minWidth: 300
     // Width of the drag handle straddling the inner edge of the strip
     readonly property int handle: 8
+    // Mirrors general.extend_border_grab_area: how far outside a floating
+    // window Hyprland still starts a border resize
+    readonly property int grabArea: 15
     // Mirrors general.border_size in hypr/conf/visuals.lua: the window is
     // inset by it, so its border stays on screen
     readonly property int border: 2
@@ -81,6 +84,7 @@ Singleton {
         Quickshell.execDetached(["hyprctl", "eval", `
             local w = hl.get_window("address:${address}")
             if not w then return end
+            hl.dispatch(hl.dsp.window.tag({ tag = "-sidebar", window = w }))
             if w.pinned then hl.dispatch(hl.dsp.window.pin({ window = w })) end
             if w.floating then hl.dispatch(hl.dsp.window.float({ action = "disable", window = w })) end
         `]);
@@ -104,6 +108,8 @@ Singleton {
             end
             if not w.floating then hl.dispatch(hl.dsp.window.float({ action = "enable", window = w })) end
             if not w.pinned then hl.dispatch(hl.dsp.window.pin({ window = w })) end
+            -- Lets hypr/conf/sidebar.lua find the window
+            hl.dispatch(hl.dsp.window.tag({ tag = "+sidebar", window = w }))
             local right = m.x + m.width / m.scale
             local height = m.height / m.scale - m.reserved.top - m.reserved.bottom
             hl.dispatch(hl.dsp.window.resize({

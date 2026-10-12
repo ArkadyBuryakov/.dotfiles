@@ -3,6 +3,7 @@
 -- ##############################################################################
 
 local roles = require("conf/roles")
+local sidebar = require("conf/sidebar")
 
 local mainMod = "SUPER"
 
@@ -11,6 +12,10 @@ local terminal = "kitty"
 local fileManager = "kitty yazi"
 local guiFileManager = "nautilus"
 local menu = "rofi"
+
+-- A window docked as a sidebar stays put: binds that would move or resize it
+-- do nothing while it is focused (see conf/sidebar.lua)
+local unless_docked = sidebar.unless_docked
 
 -- Equivalent of the old `bindp`: bypasses app requests to inhibit keybinds
 local function bindp(keys, dispatcher, opts)
@@ -93,22 +98,28 @@ bindp("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"))
 bindp(mainMod .. " + SHIFT + f23", hl.dsp.exec_cmd('zen-browser --new-window "https://claude.ai/new"'))
 
 -- Move focus with mainMod + arrow keys
-bindp(mainMod .. " + h", hl.dsp.focus({ direction = "left" }))
-bindp(mainMod .. " + l", hl.dsp.focus({ direction = "right" }))
-bindp(mainMod .. " + k", hl.dsp.focus({ direction = "up" }))
-bindp(mainMod .. " + j", hl.dsp.focus({ direction = "down" }))
-bindp(mainMod .. " + SHIFT + h", hl.dsp.window.move({ direction = "left", group_aware = true }))
-bindp(mainMod .. " + SHIFT + l", hl.dsp.window.move({ direction = "right", group_aware = true }))
-bindp(mainMod .. " + SHIFT + k", hl.dsp.window.move({ direction = "up", group_aware = true }))
-bindp(mainMod .. " + SHIFT + j", hl.dsp.window.move({ direction = "down", group_aware = true }))
-bindp(mainMod .. " + left", hl.dsp.focus({ direction = "left" }))
-bindp(mainMod .. " + right", hl.dsp.focus({ direction = "right" }))
-bindp(mainMod .. " + up", hl.dsp.focus({ direction = "up" }))
-bindp(mainMod .. " + down", hl.dsp.focus({ direction = "down" }))
-bindp(mainMod .. " + SHIFT + left", hl.dsp.window.move({ direction = "left", group_aware = true }))
-bindp(mainMod .. " + SHIFT + right", hl.dsp.window.move({ direction = "right", group_aware = true }))
-bindp(mainMod .. " + SHIFT + up", hl.dsp.window.move({ direction = "up", group_aware = true }))
-bindp(mainMod .. " + SHIFT + down", hl.dsp.window.move({ direction = "down", group_aware = true }))
+-- Goes through conf/sidebar.lua so that a docked window can be reached too
+local function focus(direction)
+	return function()
+		sidebar.focus(direction)
+	end
+end
+bindp(mainMod .. " + h", focus("left"))
+bindp(mainMod .. " + l", focus("right"))
+bindp(mainMod .. " + k", focus("up"))
+bindp(mainMod .. " + j", focus("down"))
+bindp(mainMod .. " + SHIFT + h", unless_docked(hl.dsp.window.move({ direction = "left", group_aware = true })))
+bindp(mainMod .. " + SHIFT + l", unless_docked(hl.dsp.window.move({ direction = "right", group_aware = true })))
+bindp(mainMod .. " + SHIFT + k", unless_docked(hl.dsp.window.move({ direction = "up", group_aware = true })))
+bindp(mainMod .. " + SHIFT + j", unless_docked(hl.dsp.window.move({ direction = "down", group_aware = true })))
+bindp(mainMod .. " + left", focus("left"))
+bindp(mainMod .. " + right", focus("right"))
+bindp(mainMod .. " + up", focus("up"))
+bindp(mainMod .. " + down", focus("down"))
+bindp(mainMod .. " + SHIFT + left", unless_docked(hl.dsp.window.move({ direction = "left", group_aware = true })))
+bindp(mainMod .. " + SHIFT + right", unless_docked(hl.dsp.window.move({ direction = "right", group_aware = true })))
+bindp(mainMod .. " + SHIFT + up", unless_docked(hl.dsp.window.move({ direction = "up", group_aware = true })))
+bindp(mainMod .. " + SHIFT + down", unless_docked(hl.dsp.window.move({ direction = "down", group_aware = true })))
 
 -- Switch workspaces with mainMod + [1-9]
 -- Move active window to a workspace with mainMod + SHIFT + [1-9]
@@ -116,38 +127,38 @@ local navigate = "~/.config/hypr/scripts/navigate.sh"
 for i = 1, 9 do
 	bindp(mainMod .. " + " .. i, hl.dsp.exec_cmd(navigate .. " workspace " .. i .. " false"))
 	bindp(mainMod .. " + CTRL + " .. i, hl.dsp.exec_cmd(navigate .. " workspace " .. i .. " true"))
-	bindp(mainMod .. " + SHIFT + " .. i, hl.dsp.exec_cmd(navigate .. " movetoworkspace " .. i .. " false"))
-	bindp(mainMod .. " + CTRL + SHIFT + " .. i, hl.dsp.exec_cmd(navigate .. " movetoworkspace " .. i .. " true"))
+	bindp(mainMod .. " + SHIFT + " .. i, unless_docked(hl.dsp.exec_cmd(navigate .. " movetoworkspace " .. i .. " false")))
+	bindp(mainMod .. " + CTRL + SHIFT + " .. i, unless_docked(hl.dsp.exec_cmd(navigate .. " movetoworkspace " .. i .. " true")))
 end
 
 bindp(mainMod .. " + 0", hl.dsp.exec_cmd('notify-send "Copied hex value: $(hyprpicker -a)"'))
 
 -- Special workspaces
 bindp(mainMod .. " + S", hl.dsp.workspace.toggle_special("magic"))
-bindp(mainMod .. " + SHIFT + S", hl.dsp.window.move({ workspace = "special:magic" }))
+bindp(mainMod .. " + SHIFT + S", unless_docked(hl.dsp.window.move({ workspace = "special:magic" })))
 bindp(mainMod .. " + C", hl.dsp.workspace.toggle_special("config"))
-bindp(mainMod .. " + SHIFT + C", hl.dsp.window.move({ workspace = "special:config" }))
+bindp(mainMod .. " + SHIFT + C", unless_docked(hl.dsp.window.move({ workspace = "special:config" })))
 
 -- Scroll through existing workspaces
 bindp(mainMod .. " + CTRL + l", hl.dsp.focus({ workspace = "+1" }))
 bindp(mainMod .. " + CTRL + h", hl.dsp.focus({ workspace = "-1" }))
-bindp(mainMod .. " + CTRL + SHIFT + l", hl.dsp.window.move({ workspace = "+1" }))
-bindp(mainMod .. " + CTRL + SHIFT + h", hl.dsp.window.move({ workspace = "-1" }))
+bindp(mainMod .. " + CTRL + SHIFT + l", unless_docked(hl.dsp.window.move({ workspace = "+1" })))
+bindp(mainMod .. " + CTRL + SHIFT + h", unless_docked(hl.dsp.window.move({ workspace = "-1" })))
 bindp(mainMod .. " + CTRL + right", hl.dsp.focus({ workspace = "+1" }))
 bindp(mainMod .. " + CTRL + left", hl.dsp.focus({ workspace = "-1" }))
-bindp(mainMod .. " + CTRL + SHIFT + right", hl.dsp.window.move({ workspace = "+1" }))
-bindp(mainMod .. " + CTRL + SHIFT + left", hl.dsp.window.move({ workspace = "-1" }))
+bindp(mainMod .. " + CTRL + SHIFT + right", unless_docked(hl.dsp.window.move({ workspace = "+1" })))
+bindp(mainMod .. " + CTRL + SHIFT + left", unless_docked(hl.dsp.window.move({ workspace = "-1" })))
 
 -- Scroll through existing monitors
 bindp(mainMod .. " + CTRL + k", hl.dsp.focus({ monitor = "+1" }))
 bindp(mainMod .. " + CTRL + j", hl.dsp.focus({ monitor = "-1" }))
-bindp(mainMod .. " + CTRL + SHIFT + k", hl.dsp.window.move({ monitor = "+1" }))
-bindp(mainMod .. " + CTRL + SHIFT + j", hl.dsp.window.move({ monitor = "-1" }))
+bindp(mainMod .. " + CTRL + SHIFT + k", unless_docked(hl.dsp.window.move({ monitor = "+1" })))
+bindp(mainMod .. " + CTRL + SHIFT + j", unless_docked(hl.dsp.window.move({ monitor = "-1" })))
 bindp(mainMod .. " + CTRL + up", hl.dsp.focus({ monitor = "+1" }))
 bindp(mainMod .. " + CTRL + down", hl.dsp.focus({ monitor = "-1" }))
-bindp(mainMod .. " + CTRL + SHIFT + up", hl.dsp.window.move({ monitor = "+1" }))
-bindp(mainMod .. " + CTRL + SHIFT + down", hl.dsp.window.move({ monitor = "-1" }))
+bindp(mainMod .. " + CTRL + SHIFT + up", unless_docked(hl.dsp.window.move({ monitor = "+1" })))
+bindp(mainMod .. " + CTRL + SHIFT + down", unless_docked(hl.dsp.window.move({ monitor = "-1" })))
 
 -- Move/resize windows with mainMod + LMB/RMB and dragging
-bindp(mainMod .. " + mouse:272", hl.dsp.window.drag(), { mouse = true })
-bindp(mainMod .. " + ALT + mouse:272", hl.dsp.window.resize(), { mouse = true })
+bindp(mainMod .. " + mouse:272", unless_docked(hl.dsp.window.drag()), { mouse = true })
+bindp(mainMod .. " + ALT + mouse:272", unless_docked(hl.dsp.window.resize()), { mouse = true })
