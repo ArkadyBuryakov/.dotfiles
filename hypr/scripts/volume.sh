@@ -5,6 +5,7 @@
 #   ./volume.sh up      # Increase volume by 5%
 #   ./volume.sh down    # Decrease volume by 5%
 #   ./volume.sh toggle  # Toggle mute
+#   ./volume.sh mic     # Toggle microphone mute
 #
 # Note: When changing volume with "up" or "down", the script ensures that the sink is unmuted.
 # A test sound will be played and a notification will be sent showing the new volume level.
@@ -13,6 +14,7 @@
 
 TEST_SOUND="/usr/share/sounds/freedesktop/stereo/audio-volume-change.oga"
 SOUND_SINK="@DEFAULT_SINK@"
+MIC_SOURCE="@DEFAULT_AUDIO_SOURCE@"
 LABEL="volume-control" # Used for notification replacement
 PREVIOUS_ID="$(<${XDG_RUNTIME_DIR}/arkady_sys_notification_id)"
 PREVIOUS_ID="${PREVIOUS_ID:-0}"
@@ -82,8 +84,17 @@ function toggle_mute() {
   wpctl set-mute "$SOUND_SINK" toggle
 }
 
+function toggle_mic() {
+  wpctl set-mute "$MIC_SOURCE" toggle
+  if [[ "$(wpctl get-volume "$MIC_SOURCE" 2>/dev/null)" == *"[MUTED]"* ]]; then
+    notify-send "  Mic OFF" -c system
+  else
+    notify-send "  Mic ON" -c system
+  fi
+}
+
 if [[ $# -ne 1 ]]; then
-  echo "Usage: $0 {up|down|toggle}"
+  echo "Usage: $0 {up|down|toggle|mic}"
   exit 1
 fi
 
@@ -97,9 +108,14 @@ down)
 toggle)
   toggle_mute
   ;;
+mic)
+  # No test sound for the microphone
+  toggle_mic
+  exit 0
+  ;;
 *)
   echo "Invalid parameter: $1"
-  echo "Usage: $0 {up|down|toggle}"
+  echo "Usage: $0 {up|down|toggle|mic}"
   exit 1
   ;;
 esac

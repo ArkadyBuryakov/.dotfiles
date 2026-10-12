@@ -69,7 +69,7 @@ hl.on("monitor.added", apply_monitor_bindings)
 hl.on("monitor.removed", apply_monitor_bindings)
 
 -- Workspace rules
-hl.workspace_rule({ workspace = "special:magic", on_created_empty = "Telegram & gtk-launch org.arkady.todo.desktop" })
+hl.workspace_rule({ workspace = "special:magic", on_created_empty = "Telegram & thunderbird" })
 hl.workspace_rule({ workspace = "special:config", on_created_empty = "gtk-launch org.arkady.config.desktop" })
 
 -- Smart gaps
