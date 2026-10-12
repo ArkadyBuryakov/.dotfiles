@@ -67,18 +67,21 @@ refresh()
 function M.sync()
 	for _, dock in ipairs(hl.get_windows({ tag = TAG })) do
 		local monitor = dock.monitor
-		local workspace = monitor and (monitor.active_special_workspace or monitor.active_workspace)
-		local fullscreen = workspace and workspace.fullscreen_mode == 2 and workspace.fullscreen_window
+		-- The docked window lives on the regular workspace even while a
+		-- special one is shown over it
+		local home = monitor and monitor.active_workspace
+		local shown = monitor and (monitor.active_special_workspace or home)
+		local fullscreen = shown and shown.fullscreen_mode == 2 and shown.fullscreen_window
 		local covered = fullscreen and fullscreen.address ~= dock.address
 
 		if covered and dock.pinned then
 			hl.dispatch(hl.dsp.window.pin({ window = dock }))
 			hl.dispatch(hl.dsp.window.alter_zorder({ mode = "bottom", window = dock }))
-		elseif workspace and not covered and not dock.pinned and dock.floating then
+		elseif home and not covered and not dock.pinned and dock.floating then
 			-- Changing workspace shifts a floating window, so put it back
 			local x, y = dock.at.x, dock.at.y
-			if dock.workspace and dock.workspace.id ~= workspace.id then
-				hl.dispatch(hl.dsp.window.move({ workspace = workspace.id, follow = false, window = dock }))
+			if dock.workspace and dock.workspace.id ~= home.id then
+				hl.dispatch(hl.dsp.window.move({ workspace = home.id, follow = false, window = dock }))
 			end
 			hl.dispatch(hl.dsp.window.pin({ window = dock }))
 			hl.dispatch(hl.dsp.window.move({ x = x, y = y, window = dock }))

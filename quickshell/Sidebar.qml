@@ -47,24 +47,36 @@ Singleton {
 
     // Dock the focused window on its monitor, or release it if it is docked.
     function toggle() {
-        const active = Hyprland.activeToplevel;
-        if (!active)
-            return;
-        const address = `0x${active.address}`;
-        const current = Object.keys(docked).find(name => docked[name] === address);
-        if (current) {
-            undock(current);
-            return;
+        focused.running = true;
+    }
+
+    // Asked from the compositor: for a window on a special workspace,
+    // Quickshell reports the monitor that workspace was first opened on.
+    Process {
+        id: focused
+        command: ["hyprctl", "-j", "activewindow"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const window = JSON.parse(text);
+                const address = window.address;
+                if (!address)
+                    return;
+                const current = Object.keys(root.docked).find(name => root.docked[name] === address);
+                if (current) {
+                    root.undock(current);
+                    return;
+                }
+                const name = Hyprland.monitors.values.find(m => m.id === window.monitor)?.name;
+                const screen = Quickshell.screens.find(s => s.name === name);
+                if (!screen)
+                    return;
+                if (root.docked[name])
+                    root.undock(name);
+                state.docked = Object.assign({}, root.docked, { [name]: address });
+                root.save();
+                root.apply(screen);
+            }
         }
-        const name = (active.monitor ?? Hyprland.focusedMonitor)?.name;
-        const screen = Quickshell.screens.find(s => s.name === name);
-        if (!screen)
-            return;
-        if (docked[name])
-            undock(name);
-        state.docked = Object.assign({}, docked, { [name]: address });
-        save();
-        apply(screen);
     }
 
     // Stop tracking the window docked on a monitor, without touching it.
@@ -87,6 +99,9 @@ Singleton {
             hl.dispatch(hl.dsp.window.tag({ tag = "-sidebar", window = w }))
             if w.pinned then hl.dispatch(hl.dsp.window.pin({ window = w })) end
             if w.floating then hl.dispatch(hl.dsp.window.float({ action = "disable", window = w })) end
+            -- Not behind the special workspace it may have been released from
+            local special = w.monitor and w.monitor.active_special_workspace
+            if special then hl.dispatch(hl.dsp.window.move({ workspace = special.name, window = w })) end
         `]);
     }
 
