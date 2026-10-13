@@ -2,20 +2,22 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 
-// The strip a docked window (see Sidebar.qml) sits on. It is invisible and
-// does three things: its exclusive zone keeps tiled windows out of the strip,
-// a handle over its inner edge drags the width, and it takes the pointer
-// input around the window, where Hyprland would otherwise start a border
-// resize (general.resize_on_border).
+// The strip a docked window (see Sidebar.qml) sits on. It is invisible, tabs
+// aside, and does four things: its exclusive zone keeps tiled windows out of
+// the strip, a handle over its inner edge drags the width, tabs above the
+// window switch between the windows of the sidebar when it holds several, and
+// it takes the pointer input around the window, where Hyprland would otherwise
+// start a border resize (general.resize_on_border).
 PanelWindow {
     id: panel
 
     required property ShellScreen modelData
 
     readonly property int stripWidth: Sidebar.stripWidth(modelData)
+    readonly property int tabHeight: Sidebar.tabs(modelData.name)
 
     screen: modelData
-    visible: Sidebar.docked[modelData.name] !== undefined
+    visible: Sidebar.isOpen(modelData.name)
     anchors {
         top: true
         bottom: true
@@ -46,6 +48,7 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-sidebar"
 
     onStripWidthChanged: resize.start()
+    onTabHeightChanged: resize.start()
     onVisibleChanged: resize.start()
     // The monitor changed its mode or scale
     onWidthChanged: resize.start()
@@ -55,10 +58,10 @@ PanelWindow {
     Timer {
         id: resize
         interval: 33
-        onTriggered: Sidebar.apply(panel.screen)
+        onTriggered: Sidebar.apply(panel.screen.name)
     }
 
-    // The docked window and its border
+    // The tabs, the docked window and its border
     Item {
         id: frame
 
@@ -71,6 +74,23 @@ PanelWindow {
 
             anchors.fill: parent
             anchors.margins: Sidebar.border
+            anchors.topMargin: Sidebar.border + panel.tabHeight
+        }
+
+        Row {
+            width: parent.width
+            height: panel.tabHeight
+            visible: panel.tabHeight > 0
+
+            Repeater {
+                model: Sidebar.windows(panel.modelData.name)
+
+                SidebarTab {
+                    width: frame.width / Sidebar.windows(panel.modelData.name).length
+                    height: panel.tabHeight
+                    active: modelData === Sidebar.active(panel.modelData.name)
+                }
+            }
         }
     }
 

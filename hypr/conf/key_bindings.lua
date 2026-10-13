@@ -36,8 +36,10 @@ bindp(mainMod .. " + escape", hl.dsp.exec_cmd("hyprlock"))
 bindp(mainMod .. " + SHIFT + escape", hl.dsp.exec_cmd("pkill wlogout || wlogout"))
 bindp(mainMod .. " + V", hl.dsp.window.float({ action = "toggle" }))
 bindp(mainMod .. " + SHIFT + V", unless_docked(hl.dsp.window.pin()))
--- Dock the focused window as a sidebar / release it (quickshell/Sidebar.qml)
-bindp(mainMod .. " + backslash", hl.dsp.exec_cmd("qs ipc call sidebar toggle"))
+-- Open / close the sidebar; put the focused window into it / take it out
+-- (quickshell/Sidebar.qml)
+bindp(mainMod .. " + backslash", sidebar.toggle)
+bindp(mainMod .. " + SHIFT + backslash", sidebar.toggle_window)
 bindp(
 	mainMod .. " + SUPER_L",
 	hl.dsp.exec_cmd("pkill " .. menu .. " || { ~/.config/rofi/scan-projects.sh; " .. menu .. " -show drun; }"),
@@ -46,8 +48,13 @@ bindp(
 -- bindp(mainMod .. " + W", hl.dsp.layout("togglesplit")) -- dwindle
 bindp(mainMod .. " + G", hl.dsp.group.toggle())
 bindp(mainMod .. " + SHIFT + G", hl.dsp.group.lock_active({ action = "toggle" }))
-bindp(mainMod .. " + bracketleft", hl.dsp.group.prev())
-bindp(mainMod .. " + bracketright", hl.dsp.group.next())
+-- Also steps through the tabs of the sidebar
+bindp(mainMod .. " + bracketleft", function()
+	sidebar.cycle(-1)
+end)
+bindp(mainMod .. " + bracketright", function()
+	sidebar.cycle(1)
+end)
 bindp(mainMod .. " + SHIFT + bracketleft", hl.dsp.group.move_window({ forward = false }))
 bindp(mainMod .. " + SHIFT + bracketright", hl.dsp.group.move_window({ forward = true }))
 bindp("f11", hl.dsp.window.fullscreen())
@@ -104,22 +111,29 @@ local function focus(direction)
 		sidebar.focus(direction)
 	end
 end
+-- Moving goes through it as well: right from the rightmost position takes a
+-- window into the sidebar, left takes it out
+local function move(direction)
+	return function()
+		sidebar.move(direction)
+	end
+end
 bindp(mainMod .. " + h", focus("left"))
 bindp(mainMod .. " + l", focus("right"))
 bindp(mainMod .. " + k", focus("up"))
 bindp(mainMod .. " + j", focus("down"))
-bindp(mainMod .. " + SHIFT + h", unless_docked(hl.dsp.window.move({ direction = "left", group_aware = true })))
-bindp(mainMod .. " + SHIFT + l", unless_docked(hl.dsp.window.move({ direction = "right", group_aware = true })))
-bindp(mainMod .. " + SHIFT + k", unless_docked(hl.dsp.window.move({ direction = "up", group_aware = true })))
-bindp(mainMod .. " + SHIFT + j", unless_docked(hl.dsp.window.move({ direction = "down", group_aware = true })))
+bindp(mainMod .. " + SHIFT + h", move("left"))
+bindp(mainMod .. " + SHIFT + l", move("right"))
+bindp(mainMod .. " + SHIFT + k", move("up"))
+bindp(mainMod .. " + SHIFT + j", move("down"))
 bindp(mainMod .. " + left", focus("left"))
 bindp(mainMod .. " + right", focus("right"))
 bindp(mainMod .. " + up", focus("up"))
 bindp(mainMod .. " + down", focus("down"))
-bindp(mainMod .. " + SHIFT + left", unless_docked(hl.dsp.window.move({ direction = "left", group_aware = true })))
-bindp(mainMod .. " + SHIFT + right", unless_docked(hl.dsp.window.move({ direction = "right", group_aware = true })))
-bindp(mainMod .. " + SHIFT + up", unless_docked(hl.dsp.window.move({ direction = "up", group_aware = true })))
-bindp(mainMod .. " + SHIFT + down", unless_docked(hl.dsp.window.move({ direction = "down", group_aware = true })))
+bindp(mainMod .. " + SHIFT + left", move("left"))
+bindp(mainMod .. " + SHIFT + right", move("right"))
+bindp(mainMod .. " + SHIFT + up", move("up"))
+bindp(mainMod .. " + SHIFT + down", move("down"))
 
 -- Switch workspaces with mainMod + [1-9]
 -- Move active window to a workspace with mainMod + SHIFT + [1-9]
@@ -150,14 +164,20 @@ bindp(mainMod .. " + CTRL + SHIFT + right", unless_docked(hl.dsp.window.move({ w
 bindp(mainMod .. " + CTRL + SHIFT + left", unless_docked(hl.dsp.window.move({ workspace = "-1" })))
 
 -- Scroll through existing monitors
+-- A docked window moves into the sidebar of the other monitor
+local function to_monitor(offset)
+	return function()
+		sidebar.move_to_monitor(offset)
+	end
+end
 bindp(mainMod .. " + CTRL + k", hl.dsp.focus({ monitor = "+1" }))
 bindp(mainMod .. " + CTRL + j", hl.dsp.focus({ monitor = "-1" }))
-bindp(mainMod .. " + CTRL + SHIFT + k", unless_docked(hl.dsp.window.move({ monitor = "+1" })))
-bindp(mainMod .. " + CTRL + SHIFT + j", unless_docked(hl.dsp.window.move({ monitor = "-1" })))
+bindp(mainMod .. " + CTRL + SHIFT + k", to_monitor(1))
+bindp(mainMod .. " + CTRL + SHIFT + j", to_monitor(-1))
 bindp(mainMod .. " + CTRL + up", hl.dsp.focus({ monitor = "+1" }))
 bindp(mainMod .. " + CTRL + down", hl.dsp.focus({ monitor = "-1" }))
-bindp(mainMod .. " + CTRL + SHIFT + up", unless_docked(hl.dsp.window.move({ monitor = "+1" })))
-bindp(mainMod .. " + CTRL + SHIFT + down", unless_docked(hl.dsp.window.move({ monitor = "-1" })))
+bindp(mainMod .. " + CTRL + SHIFT + up", to_monitor(1))
+bindp(mainMod .. " + CTRL + SHIFT + down", to_monitor(-1))
 
 -- Move/resize windows with mainMod + LMB/RMB and dragging
 bindp(mainMod .. " + mouse:272", unless_docked(hl.dsp.window.drag()), { mouse = true })
