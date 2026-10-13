@@ -33,8 +33,8 @@ Row {
             width: Math.max(label.implicitWidth + 2 * Theme.padding, Math.ceil(height * 4 / 3))
             height: root.height
             color: modelData.active || mouse.containsMouse ? Theme.accent : "transparent"
-            // Outlined while it has windows
-            border.width: modelData.toplevels.values.length > 0 ? 2 : 0
+            // Outlined while it has windows, unless the active fill already marks it
+            border.width: !modelData.active && modelData.toplevels.values.length > 0 ? 2 : 0
             border.color: Theme.grey
 
             Text {
