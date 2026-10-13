@@ -8,4 +8,16 @@ ShellRoot {
 
         Bar {}
     }
+
+    Variants {
+        model: Quickshell.screens
+
+        SidebarPanel {}
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        SidebarBackdrop {}
+    }
 }
