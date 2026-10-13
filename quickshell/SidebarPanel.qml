@@ -3,7 +3,8 @@ import Quickshell
 import Quickshell.Wayland
 
 // The strip a docked window (see Sidebar.qml) sits on. It is invisible, tabs
-// aside, and does four things: its exclusive zone keeps tiled windows out of
+// aside (what an empty strip shows is SidebarBackdrop, under the windows), and
+// does four things: its exclusive zone keeps tiled windows out of
 // the strip, a handle over its inner edge drags the width, tabs above the
 // window switch between the windows of the sidebar when it holds several, and
 // it takes the pointer input around the window, where Hyprland would otherwise

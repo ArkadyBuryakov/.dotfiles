@@ -14,4 +14,10 @@ ShellRoot {
 
         SidebarPanel {}
     }
+
+    Variants {
+        model: Quickshell.screens
+
+        SidebarBackdrop {}
+    }
 }

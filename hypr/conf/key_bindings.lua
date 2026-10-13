@@ -180,5 +180,10 @@ bindp(mainMod .. " + CTRL + SHIFT + up", to_monitor(1))
 bindp(mainMod .. " + CTRL + SHIFT + down", to_monitor(-1))
 
 -- Move/resize windows with mainMod + LMB/RMB and dragging
-bindp(mainMod .. " + mouse:272", unless_docked(hl.dsp.window.drag()), { mouse = true })
+-- Dropped on an open sidebar a window goes into it, and a docked one dragged
+-- out leaves it
+bindp(mainMod .. " + mouse:272", hl.dsp.window.drag(), { mouse = true })
+bindp(mainMod .. " + mouse:272", sidebar.grab)
+-- Whatever is held by then: the button may well outlast the modifier
+bindp("mouse:272", sidebar.drop, { release = true, ignore_mods = true, non_consuming = true })
 bindp(mainMod .. " + ALT + mouse:272", unless_docked(hl.dsp.window.resize()), { mouse = true })

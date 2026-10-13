@@ -38,6 +38,9 @@ Singleton {
     // Output name -> strip width, remembered while the sidebar is empty
     readonly property var widths: state.widths
 
+    // A window is being dragged around: an open sidebar shows where to drop it
+    property bool dragging: false
+
     function windows(name: string): var {
         return sidebars[name]?.windows ?? [];
     }
@@ -47,7 +50,7 @@ Singleton {
     }
 
     function isOpen(name: string): bool {
-        return sidebars[name]?.open === true && windows(name).length > 0;
+        return sidebars[name]?.open === true;
     }
 
     // Height the tabs take off the docked window
@@ -122,12 +125,12 @@ Singleton {
             run(`require("conf/sidebar").release("${address}")\n` + layout(name, false));
     }
 
-    // Open the sidebar of a monitor, or close it.
+    // Open the sidebar of a monitor, empty as it may be, or close it.
     function toggle(name: string) {
-        if (windows(name).length === 0)
+        if (!Quickshell.screens.some(screen => screen.name === name))
             return;
-        const open = !sidebars[name].open;
-        set(name, Object.assign({}, sidebars[name], { open: open }));
+        const open = !isOpen(name);
+        set(name, { windows: windows(name), active: active(name), open: open });
         run(layout(name, open));
     }
 
@@ -259,6 +262,9 @@ Singleton {
                     break;
                 case "select":
                     root.select(args[0]);
+                    break;
+                case "drag":
+                    root.dragging = args[0] === "1";
                     break;
                 case "cycle":
                     root.cycle(args[0], parseInt(args[1]));

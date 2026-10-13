@@ -17,6 +17,16 @@ local STASH = "special:sidebar"
 
 local M = {}
 
+-- An empty sidebar looks like the bar: darkened, blurred wallpaper
+-- (quickshell/SidebarBackdrop.qml)
+hl.layer_rule({
+	name = "sidebar rules",
+	match = { namespace = "quickshell-dropzone" },
+
+	xray = true,
+	blur = true,
+})
+
 -- Monitor name -> rules overriding the smart gaps ones there
 local overrides = {}
 
@@ -318,6 +328,68 @@ function M.move(direction)
 	else
 		hl.dispatch(hl.dsp.window.move({ direction = direction, group_aware = true }))
 	end
+end
+
+--- Monitor under the cursor, if the cursor is over the strip of its sidebar.
+---@return HL.Monitor|nil
+local function strip_at_cursor()
+	local cursor, monitor = hl.get_cursor_pos(), hl.get_monitor_at_cursor()
+	if not cursor or not monitor or #hl.get_layers({ namespace = NAMESPACE, monitor = monitor }) == 0 then
+		return nil
+	end
+	-- The strip is all that is reserved on that side
+	local left = monitor.x + monitor.width / monitor.scale - monitor.reserved.right
+	return cursor.x >= left and monitor or nil
+end
+
+-- Address of the window a drag started on
+local dragged
+
+--- A drag starts: note the window under the cursor.
+function M.grab()
+	local window, cursor = hl.get_active_window(), hl.get_cursor_pos()
+	local over = window
+		and cursor
+		and cursor.x >= window.at.x
+		and cursor.x < window.at.x + window.size.x
+		and cursor.y >= window.at.y
+		and cursor.y < window.at.y + window.size.y
+	dragged = over and window.address or nil
+	if not dragged then
+		return
+	end
+	-- The sidebar shows where to drop it
+	ask("drag", 1)
+	-- Pinned windows are drawn over the others: until the drop (which syncs)
+	-- the docked ones are not, to keep the dragged window in view over them
+	for _, dock in ipairs(hl.get_windows({ tag = TAG })) do
+		if dock.pinned and dock.address ~= dragged then
+			hl.dispatch(hl.dsp.window.pin({ window = dock }))
+			hl.dispatch(hl.dsp.window.alter_zorder({ mode = "bottom", window = dock }))
+		end
+	end
+end
+
+--- The drag ended: a window dropped on the strip of an open sidebar goes into
+--- it, and a docked one dropped anywhere else leaves it.
+function M.drop()
+	local address = dragged
+	dragged = nil
+	if not address then
+		return
+	end
+	ask("drag", 0)
+	-- Once Hyprland has put the window down itself
+	hl.timer(function()
+		local window = hl.get_window("address:" .. address)
+		local monitor = strip_at_cursor()
+		M.sync()
+		if window and monitor then
+			ask("add", address, monitor.name)
+		elseif window and M.is_docked(window) then
+			ask("remove", address)
+		end
+	end, { timeout = 50, type = "oneshot" })
 end
 
 --- Move the focused window to another monitor; a docked one goes into the
