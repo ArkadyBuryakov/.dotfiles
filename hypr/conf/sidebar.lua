@@ -513,4 +513,42 @@ function M.focus(direction)
 	hl.dispatch(hl.dsp.focus(target and { window = target } or { direction = direction }))
 end
 
+-- Windows of these classes go into the sidebar of their monitor as they open
+-- (Claude Code launchers in ~/.local/share/applications)
+local AUTODOCK = { ["claude-code"] = true }
+
+hl.on("window.open", function(window)
+	if not (window and AUTODOCK[window.initial_class]) then
+		return
+	end
+	local address = window.address
+	-- Once Hyprland has placed it
+	hl.timer(function()
+		local w = hl.get_window("address:" .. address)
+		if w and w.monitor and not M.is_docked(w) then
+			ask("add", address, w.monitor.name)
+		end
+	end, { timeout = 50, type = "oneshot" })
+end)
+
+--- Bring a window of a class into the sidebar of the focused monitor, on show
+--- and focused; start it with the command if there is none.
+---@param class string
+---@param command string
+function M.summon(class, command)
+	local window
+	for _, w in ipairs(hl.get_windows()) do
+		if w.initial_class == class then
+			window = w
+			break
+		end
+	end
+	local monitor = hl.get_active_monitor()
+	if window and monitor then
+		ask("add", window.address, monitor.name)
+	else
+		hl.dispatch(hl.dsp.exec_cmd(command))
+	end
+end
+
 return M
