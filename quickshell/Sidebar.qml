@@ -28,7 +28,7 @@ Singleton {
     // inset by it, so its border stays on screen
     readonly property int border: 2
     // Height of the tabs, shown once a sidebar holds several windows
-    readonly property int tabHeight: Theme.barHeight
+    readonly property int tabHeight: 18
 
     // Output name -> { windows: addresses ("0x..."), active: the address on
     // show, open }
@@ -38,6 +38,9 @@ Singleton {
     // Output name -> "left" | "right": the side its sidebar is on, or was the
     // last time. Mirrored like the above
     property var sides: ({})
+    // The state file has been read back. Not necessarily by the time this
+    // is created: after a hot reload the adapter fills in later
+    property bool restored: false
     // Output name -> strip width, remembered while the sidebar is empty
     readonly property var widths: state.widths
 
@@ -78,6 +81,9 @@ Singleton {
     }
 
     function save() {
+        // Would write the empty state over the one still to be read
+        if (!restored)
+            return;
         state.sidebars = sidebars;
         state.sides = sides;
         file.writeAdapter();
@@ -209,9 +215,20 @@ Singleton {
             Quickshell.execDetached(["hyprctl", "eval", script]);
     }
 
-    Component.onCompleted: {
+    // Take the sidebars over from the state file, once it is read (or
+    // found missing), and check them against the windows there are.
+    function restore() {
+        if (restored)
+            return;
         sidebars = state.sidebars;
         sides = state.sides ?? {};
+        restored = true;
+        check.running = true;
+    }
+
+    Component.onCompleted: {
+        if (file.loaded)
+            restore();
     }
 
     FileView {
@@ -219,6 +236,8 @@ Singleton {
         path: Quickshell.statePath("sidebar.json")
         blockLoading: true
         printErrors: false
+        onLoaded: root.restore()
+        onLoadFailed: root.restore()
 
         JsonAdapter {
             id: state
@@ -231,8 +250,8 @@ Singleton {
     // Addresses do not survive a Hyprland restart, and a monitor may be gone:
     // drop what is left of those, and put the rest back in place.
     Process {
+        id: check
         command: ["hyprctl", "clients", "-j"]
-        running: true
         stdout: StdioCollector {
             onStreamFinished: {
                 const alive = JSON.parse(text).map(client => client.address);
