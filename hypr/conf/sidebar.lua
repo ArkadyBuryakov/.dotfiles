@@ -14,6 +14,8 @@ local TAG = "sidebar"
 -- Never shown: holds the other windows of a sidebar, and all of them while it
 -- is closed
 local STASH = "special:sidebar"
+-- A sidebar sits on either side of its monitor
+local OPPOSITE = { left = "right", right = "left" }
 
 local M = {}
 
@@ -126,11 +128,12 @@ end
 --- Dock a window: fit it into the strip of a monitor.
 ---@param address string
 ---@param monitor string
+---@param side "left"|"right" side of the monitor the strip is on
 ---@param strip integer width of the strip
 ---@param top integer height the tabs take above the window
 ---@param border integer
 ---@param focus boolean
-function M.show(address, monitor, strip, top, border, focus)
+function M.show(address, monitor, side, strip, top, border, focus)
 	local w = hl.get_window("address:" .. address)
 	local m = hl.get_monitor(monitor)
 	if not w or not m then
@@ -153,9 +156,9 @@ function M.show(address, monitor, strip, top, border, focus)
 	end
 	hl.dispatch(hl.dsp.window.tag({ tag = "+" .. TAG, window = w }))
 	M.sync()
-	local right = m.x + m.width / m.scale
+	local left = side == "left" and m.x or m.x + m.width / m.scale - strip
 	local height = m.height / m.scale - m.reserved.top - m.reserved.bottom
-	local x, y = math.floor(right - strip + border), math.floor(m.y + m.reserved.top + top + border)
+	local x, y = math.floor(left + border), math.floor(m.y + m.reserved.top + top + border)
 	local width, tall = strip - 2 * border, math.floor(height - top - 2 * border)
 	hl.dispatch(hl.dsp.window.resize({ x = width, y = tall, window = w }))
 	hl.dispatch(hl.dsp.window.move({ x = x, y = y, window = w }))
@@ -236,6 +239,16 @@ hl.on("window.active", function(window)
 	end
 end)
 
+---@return "left"|"right"|nil side the sidebar of the monitor is open on
+local function open_side(monitor)
+	local layer = hl.get_layers({ namespace = NAMESPACE, monitor = monitor })[1]
+	if not layer then
+		return nil
+	end
+	-- Narrower than the monitor, so it only touches the edge it is anchored to
+	return layer.x <= monitor.x and "left" or "right"
+end
+
 ---@return HL.Window|nil window docked on the monitor
 local function docked_on(monitor)
 	return hl.get_windows({ tag = TAG, monitor = monitor })[1]
@@ -297,36 +310,65 @@ function M.toggle_window()
 	end
 end
 
---- Whether a tiled window has nowhere further right to go but the sidebar.
-local function rightmost(window)
+--- Whether a window lies wholly further to a side than another one.
+---@param side "left"|"right"
+local function beyond(window, other, side)
+	if side == "left" then
+		return window.at.x + window.size.x <= other.at.x
+	end
+	return window.at.x >= other.at.x + other.size.x
+end
+
+--- Whether a tiled window has nowhere further to a side to go but the sidebar.
+---@param side "left"|"right"
+local function outermost(window, side)
 	if window.floating or window.fullscreen ~= 0 or not window.monitor then
 		return false
 	end
-	-- Moving right takes it out of the group first
+	-- Moving sideways takes it out of the group first
 	if window.group and window.group.size > 1 then
 		return false
 	end
 	for _, other in ipairs(neighbours(window.monitor, window)) do
-		if not other.floating and other.at.x >= window.at.x + window.size.x then
+		if not other.floating and beyond(other, window, side) then
 			return false
 		end
 	end
 	return true
 end
 
---- Directional window move that also carries a window into the sidebar (right
---- from the rightmost position) and out of it (left).
+--- Directional window move that also carries a window into the sidebar (from
+--- the outermost position, towards the side the sidebar is on) and out of it
+--- (the other way). A closed sidebar takes a window from both sides, and
+--- opens on the one it came through.
 ---@param direction "left"|"right"|"up"|"down"
 function M.move(direction)
 	local window = hl.get_active_window()
+	local side = window and window.monitor and open_side(window.monitor)
 	if window and M.is_docked(window) then
-		if direction == "left" then
+		if direction == OPPOSITE[side or "right"] then
 			ask("remove", window.address)
 		end
-	elseif window and direction == "right" and rightmost(window) then
-		ask("add", window.address, window.monitor.name)
+	elseif window and OPPOSITE[direction] and (not side or side == direction) and outermost(window, direction) then
+		ask("add", window.address, window.monitor.name, side and "" or direction)
 	else
 		hl.dispatch(hl.dsp.window.move({ direction = direction, group_aware = true }))
+	end
+end
+
+--- Wrap a dispatcher so that on a docked window it moves the sidebar to a
+--- side of its monitor instead.
+---@param side "left"|"right"
+---@param dispatcher HL.Dispatcher
+---@return function
+function M.to_side(side, dispatcher)
+	return function()
+		local window = hl.get_active_window()
+		if window and window.monitor and M.is_docked(window) then
+			ask("side", window.monitor.name, side)
+		else
+			hl.dispatch(dispatcher)
+		end
 	end
 end
 
@@ -334,12 +376,18 @@ end
 ---@return HL.Monitor|nil
 local function strip_at_cursor()
 	local cursor, monitor = hl.get_cursor_pos(), hl.get_monitor_at_cursor()
-	if not cursor or not monitor or #hl.get_layers({ namespace = NAMESPACE, monitor = monitor }) == 0 then
+	local side = monitor and open_side(monitor)
+	if not cursor or not side then
 		return nil
 	end
 	-- The strip is all that is reserved on that side
-	local left = monitor.x + monitor.width / monitor.scale - monitor.reserved.right
-	return cursor.x >= left and monitor or nil
+	local over
+	if side == "left" then
+		over = cursor.x < monitor.x + monitor.reserved.left
+	else
+		over = cursor.x >= monitor.x + monitor.width / monitor.scale - monitor.reserved.right
+	end
+	return over and monitor or nil
 end
 
 -- Address of the window a drag started on
@@ -432,24 +480,30 @@ function M.focus(direction)
 	local active = hl.get_active_window()
 	local monitor = active and active.monitor or hl.get_active_monitor()
 	local dock = monitor and docked_on(monitor)
+	local side = monitor and open_side(monitor) or "right"
 	local target
 
+	--- How far a window reaches towards the sidebar
+	local function reach(window)
+		return side == "left" and -window.at.x or window.at.x + window.size.x
+	end
+
 	if dock and active and active.address == dock.address then
-		if direction == "left" then
-			-- Out of the sidebar: the window reaching furthest right, the
-			-- most recently focused one if several do
+		if direction == OPPOSITE[side] then
+			-- Out of the sidebar: the window reaching furthest towards it,
+			-- the most recently focused one if several do
 			for _, window in ipairs(neighbours(monitor, dock)) do
-				local edge, best = window.at.x + window.size.x, target and target.at.x + target.size.x
+				local edge, best = reach(window), target and reach(target)
 				if not target or edge > best or (edge == best and window.focus_history_id < target.focus_history_id) then
 					target = window
 				end
 			end
 		end
-	elseif dock and direction == "right" and not (active and active.fullscreen == 2) then
-		-- Into the sidebar, unless there still is a window further right
+	elseif dock and direction == side and not (active and active.fullscreen == 2) then
+		-- Into the sidebar, unless there still is a window further that way
 		target = dock
 		for _, window in ipairs(active and neighbours(monitor, dock) or {}) do
-			if window.at.x >= active.at.x + active.size.x then
+			if beyond(window, active, side) then
 				target = nil
 				break
 			end

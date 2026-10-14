@@ -13,13 +13,15 @@ PanelWindow {
     required property ShellScreen modelData
 
     readonly property bool empty: Sidebar.windows(modelData.name).length === 0
+    readonly property bool left: Sidebar.side(modelData.name) === "left"
 
     screen: modelData
     visible: Sidebar.isOpen(modelData.name) && (empty || Sidebar.dragging)
     anchors {
         top: true
         bottom: true
-        right: true
+        left: backdrop.left
+        right: !backdrop.left
     }
     // The strip itself is what SidebarPanel reserves: lie on it, below the bar
     exclusionMode: ExclusionMode.Ignore
@@ -45,8 +47,8 @@ PanelWindow {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            // nf-md-dock_right
-            text: "\u{F10AB}"
+            // nf-md-dock_left / nf-md-dock_right
+            text: backdrop.left ? "\u{F10AA}" : "\u{F10AB}"
             color: Theme.fg
             font.family: Theme.font
             font.pixelSize: 64

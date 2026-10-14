@@ -7,8 +7,8 @@ import Quickshell.Io
 
 // Regular windows docked as a sidebar. Each monitor has its own: a list of
 // windows, one of which is on show - floated, pinned (so it follows every
-// workspace of the monitor) and laid over a strip of the screen that
-// SidebarPanel keeps free of tiled windows. The others, and all of them while
+// workspace of the monitor) and laid over a strip on either side of the screen
+// that SidebarPanel keeps free of tiled windows. The others, and all of them while
 // the sidebar is closed, wait on a hidden workspace.
 //
 // Driven by the binds in hypr/conf/key_bindings.lua: hypr/conf/sidebar.lua
@@ -35,6 +35,9 @@ Singleton {
     // Kept here and only mirrored into the state file: an adapter property
     // set twice in a row still reads back its first value
     property var sidebars: ({})
+    // Output name -> "left" | "right": the side its sidebar is on, or was the
+    // last time. Mirrored like the above
+    property var sides: ({})
     // Output name -> strip width, remembered while the sidebar is empty
     readonly property var widths: state.widths
 
@@ -51,6 +54,10 @@ Singleton {
 
     function isOpen(name: string): bool {
         return sidebars[name]?.open === true;
+    }
+
+    function side(name: string): string {
+        return sides[name] === "left" ? "left" : "right";
     }
 
     // Height the tabs take off the docked window
@@ -72,6 +79,7 @@ Singleton {
 
     function save() {
         state.sidebars = sidebars;
+        state.sides = sides;
         file.writeAdapter();
     }
 
@@ -85,10 +93,13 @@ Singleton {
         return Object.keys(sidebars).find(name => sidebars[name].windows.includes(address)) ?? "";
     }
 
-    // Put a window into the sidebar of a monitor, on show.
-    function add(address: string, name: string) {
+    // Put a window into the sidebar of a monitor, on show. Given a side, the
+    // sidebar goes there.
+    function add(address: string, name: string, side: string) {
         if (!Quickshell.screens.some(screen => screen.name === name))
             return;
+        if (side === "left" || side === "right")
+            sides = Object.assign({}, sides, { [name]: side });
         const from = owner(address);
         if (from && from !== name)
             detach(address);
@@ -134,6 +145,16 @@ Singleton {
         run(layout(name, open));
     }
 
+    // Put the sidebar of a monitor on the other side of it.
+    function move(name: string, side: string) {
+        if (side === root.side(name) || (side !== "left" && side !== "right"))
+            return;
+        sides = Object.assign({}, sides, { [name]: side });
+        save();
+        // Asked from the docked window: the pointer follows it over
+        run(layout(name, true));
+    }
+
     // Bring a window of a sidebar on show.
     function select(address: string) {
         const name = owner(address);
@@ -175,7 +196,7 @@ Singleton {
         const shown = screen && isOpen(name) ? active(name) : "";
         // Geometry comes from the compositor: it is current even right
         // after the monitor changed its mode or scale.
-        let script = shown ? `require("conf/sidebar").show("${shown}", "${name}", ${stripWidth(screen)}, ${tabs(name)}, ${border}, ${focus})\n` : "";
+        let script = shown ? `require("conf/sidebar").show("${shown}", "${name}", "${side(name)}", ${stripWidth(screen)}, ${tabs(name)}, ${border}, ${focus})\n` : "";
         for (const address of windows(name)) {
             if (address !== shown)
                 script += `require("conf/sidebar").stash("${address}")\n`;
@@ -188,7 +209,10 @@ Singleton {
             Quickshell.execDetached(["hyprctl", "eval", script]);
     }
 
-    Component.onCompleted: sidebars = state.sidebars
+    Component.onCompleted: {
+        sidebars = state.sidebars;
+        sides = state.sides ?? {};
+    }
 
     FileView {
         id: file
@@ -199,6 +223,7 @@ Singleton {
         JsonAdapter {
             id: state
             property var sidebars: ({})
+            property var sides: ({})
             property var widths: ({})
         }
     }
@@ -255,7 +280,10 @@ Singleton {
                     root.toggle(args[0]);
                     break;
                 case "add":
-                    root.add(args[0], args[1]);
+                    root.add(args[0], args[1], args[2] ?? "");
+                    break;
+                case "side":
+                    root.move(args[0], args[1]);
                     break;
                 case "remove":
                     root.remove(args[0]);

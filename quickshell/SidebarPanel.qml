@@ -2,7 +2,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 
-// The strip a docked window (see Sidebar.qml) sits on. It is invisible, tabs
+// The strip a docked window (see Sidebar.qml) sits on, along the left or the
+// right edge of the screen. It is invisible, tabs
 // aside (what an empty strip shows is SidebarBackdrop, under the windows), and
 // does four things: its exclusive zone keeps tiled windows out of
 // the strip, a handle over its inner edge drags the width, tabs above the
@@ -16,13 +17,15 @@ PanelWindow {
 
     readonly property int stripWidth: Sidebar.stripWidth(modelData)
     readonly property int tabHeight: Sidebar.tabs(modelData.name)
+    readonly property bool left: Sidebar.side(modelData.name) === "left"
 
     screen: modelData
     visible: Sidebar.isOpen(modelData.name)
     anchors {
         top: true
         bottom: true
-        right: true
+        left: panel.left
+        right: !panel.left
     }
     // The surface always spans the widest possible strip (plus the part of the
     // handle that sticks out of it), so that it does not resize under the
@@ -49,6 +52,7 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-sidebar"
 
     onStripWidthChanged: resize.start()
+    onLeftChanged: resize.start()
     onTabHeightChanged: resize.start()
     onVisibleChanged: resize.start()
     // The monitor changed its mode or scale
@@ -66,7 +70,7 @@ PanelWindow {
     Item {
         id: frame
 
-        x: panel.width - panel.stripWidth
+        x: panel.left ? 0 : panel.width - panel.stripWidth
         width: panel.stripWidth
         height: parent.height
 
@@ -101,25 +105,27 @@ PanelWindow {
 
         // Pointer offset from the strip edge at the moment of the grab
         property real offset: 0
+        // Where in the handle the inner edge of the strip is
+        readonly property int edge: panel.left ? Sidebar.border : Sidebar.grabArea
 
-        x: frame.x - Sidebar.grabArea
+        x: (panel.left ? frame.width : frame.x) - edge
         width: Sidebar.grabArea + Sidebar.border
         height: parent.height
         hoverEnabled: true
         cursorShape: Qt.SizeHorCursor
         preventStealing: true
-        onPressed: event => offset = event.x - Sidebar.grabArea
+        onPressed: event => offset = event.x - edge
         onPositionChanged: event => {
             if (!pressed)
                 return;
-            const edge = mapToItem(null, event.x, 0).x - offset;
-            const width = Math.round(panel.width - edge);
+            const at = mapToItem(null, event.x, 0).x - offset;
+            const width = Math.round(panel.left ? at : panel.width - at);
             Sidebar.setWidth(panel.screen, Math.max(Sidebar.minWidth, Math.min(Sidebar.maxWidth(panel.screen), width)));
         }
         onReleased: Sidebar.save()
 
         Rectangle {
-            x: Sidebar.grabArea - width / 2
+            x: handle.edge - width / 2
             width: Sidebar.handle
             height: parent.height
             color: Theme.accent

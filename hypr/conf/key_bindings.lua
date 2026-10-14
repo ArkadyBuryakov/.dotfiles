@@ -111,8 +111,8 @@ local function focus(direction)
 		sidebar.focus(direction)
 	end
 end
--- Moving goes through it as well: right from the rightmost position takes a
--- window into the sidebar, left takes it out
+-- Moving goes through it as well: towards the sidebar from the outermost
+-- position takes a window into it, the other way takes it out
 local function move(direction)
 	return function()
 		sidebar.move(direction)
@@ -154,14 +154,18 @@ bindp(mainMod .. " + C", hl.dsp.workspace.toggle_special("config"))
 bindp(mainMod .. " + SHIFT + C", unless_docked(hl.dsp.window.move({ workspace = "special:config" })))
 
 -- Scroll through existing workspaces
+-- A docked window moves its sidebar to that side of the monitor instead
+local function to_workspace(side, offset)
+	return sidebar.to_side(side, hl.dsp.window.move({ workspace = offset }))
+end
 bindp(mainMod .. " + CTRL + l", hl.dsp.focus({ workspace = "+1" }))
 bindp(mainMod .. " + CTRL + h", hl.dsp.focus({ workspace = "-1" }))
-bindp(mainMod .. " + CTRL + SHIFT + l", unless_docked(hl.dsp.window.move({ workspace = "+1" })))
-bindp(mainMod .. " + CTRL + SHIFT + h", unless_docked(hl.dsp.window.move({ workspace = "-1" })))
+bindp(mainMod .. " + CTRL + SHIFT + l", to_workspace("right", "+1"))
+bindp(mainMod .. " + CTRL + SHIFT + h", to_workspace("left", "-1"))
 bindp(mainMod .. " + CTRL + right", hl.dsp.focus({ workspace = "+1" }))
 bindp(mainMod .. " + CTRL + left", hl.dsp.focus({ workspace = "-1" }))
-bindp(mainMod .. " + CTRL + SHIFT + right", unless_docked(hl.dsp.window.move({ workspace = "+1" })))
-bindp(mainMod .. " + CTRL + SHIFT + left", unless_docked(hl.dsp.window.move({ workspace = "-1" })))
+bindp(mainMod .. " + CTRL + SHIFT + right", to_workspace("right", "+1"))
+bindp(mainMod .. " + CTRL + SHIFT + left", to_workspace("left", "-1"))
 
 -- Scroll through existing monitors
 -- A docked window moves into the sidebar of the other monitor
