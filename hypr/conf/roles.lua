@@ -10,8 +10,12 @@
 --               one, otherwise simply the first screen that is plugged in, so a
 --               desktop with a single unknown output works out of the box.
 --   secondary - hosts workspaces 11-19. The external screen.
+--   projector - hosts workspace 10. A headless output that only exists while
+--               it is being cast to the projector.
 
 local M = {}
+
+M.PROJECTOR = "PROJECTOR"
 
 -- Built-in panels. Always take the primary role when connected.
 local BUILTIN = { "eDP-1", "eDP-2", "LVDS-1" }
@@ -40,7 +44,7 @@ end
 --- `secondary` is returned even while disconnected so workspaces 11-19 keep
 --- their binding and migrate back on hotplug; `secondary_connected` tells
 --- whether it is actually present.
----@return { primary: string|nil, secondary: string|nil, secondary_connected: boolean }
+---@return { primary: string|nil, secondary: string|nil, secondary_connected: boolean, projector_connected: boolean }
 function M.resolve()
 	local names = connected_names()
 
@@ -64,10 +68,15 @@ function M.resolve()
 		end
 	end
 
-	return { primary = primary, secondary = secondary, secondary_connected = secondary_connected }
+	return {
+		primary = primary,
+		secondary = secondary,
+		secondary_connected = secondary_connected,
+		projector_connected = names[M.PROJECTOR] == true,
+	}
 end
 
---- Move workspaces 1-9/11-19 back onto the monitor their role owns.
+--- Move workspaces 1-10/11-19 back onto the monitor their role owns.
 function M.reassign_workspaces()
 	local r = M.resolve()
 
@@ -80,7 +89,8 @@ function M.reassign_workspaces()
 		end
 	end
 
-	move(1, 10, r.primary)
+	move(1, 9, r.primary)
+	move(10, 10, r.projector_connected and M.PROJECTOR or r.primary)
 	move(11, 20, r.secondary_connected and r.secondary or r.primary)
 end
 

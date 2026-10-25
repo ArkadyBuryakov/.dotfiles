@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 
 // Click: month calendar.
 Module {
@@ -18,5 +19,20 @@ Module {
     SystemClock {
         id: clock
         precision: SystemClock.Minutes
+    }
+
+    // The clock's timer runs on the monotonic clock, which stops during suspend,
+    // so re-read the time when logind reports a resume
+    Process {
+        running: true
+        command: ["gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1", "--object-path", "/org/freedesktop/login1"]
+        stdout: SplitParser {
+            onRead: line => {
+                if (line.includes("PrepareForSleep (false")) {
+                    clock.enabled = false;
+                    clock.enabled = true;
+                }
+            }
+        }
     }
 }

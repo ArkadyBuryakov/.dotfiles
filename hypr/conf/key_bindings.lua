@@ -146,6 +146,10 @@ for i = 1, 9 do
 end
 
 bindp(mainMod .. " + 0", hl.dsp.exec_cmd('notify-send "Copied hex value: $(hyprpicker -a)"'))
+-- Workspace 10 is the projector (conf/roles.lua): send a window there without
+-- following it, or jump there
+bindp(mainMod .. " + SHIFT + 0", unless_docked(hl.dsp.window.move({ workspace = 10, follow = false })))
+bindp(mainMod .. " + CTRL + 0", hl.dsp.focus({ workspace = 10 }))
 
 -- Special workspaces
 bindp(mainMod .. " + S", hl.dsp.workspace.toggle_special("magic"))

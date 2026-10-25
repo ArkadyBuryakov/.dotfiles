@@ -43,14 +43,23 @@ hl.config({
 local function apply_monitor_bindings()
 	local r = roles.resolve()
 
-	for i = 1, 10 do
+	for i = 1, 9 do
 		hl.workspace_rule({
 			workspace = tostring(i),
 			monitor = r.primary,
 			default = (i == 1),
-			persistent = (r.primary ~= nil and i <= 9),
+			persistent = (r.primary ~= nil),
 		})
 	end
+
+	-- 10 is the projector's while it is being cast to, otherwise an ordinary
+	-- non-persistent workspace on the primary.
+	hl.workspace_rule({
+		workspace = "10",
+		monitor = r.projector_connected and roles.PROJECTOR or r.primary,
+		default = r.projector_connected,
+		persistent = r.projector_connected,
+	})
 
 	for i = 11, 20 do
 		hl.workspace_rule({

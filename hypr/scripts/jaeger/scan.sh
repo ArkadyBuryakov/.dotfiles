@@ -31,7 +31,12 @@ scan() {
 
   mkdir -p "$STATUS_DIR"
   clients=$(hyprctl clients -j) || return 1
-  kitty_pids=$(jq -r '[.[] | select(.class == "kitty") | .pid] | unique | .[]' <<<"$clients")
+  # Match kitty by process, not window class: launchers may set --class
+  # (e.g. the claude-code sidebar launcher)
+  local p
+  kitty_pids=$(for p in $(jq -r '[.[].pid] | unique | .[]' <<<"$clients"); do
+    [ "$(cat "/proc/$p/comm" 2>/dev/null)" = kitty ] && echo "$p"
+  done)
 
   local kpid tree hypr
   for kpid in $kitty_pids; do
@@ -41,7 +46,7 @@ scan() {
     # with hyprland clients below by matching focus-recency rank, since kitty
     # last_focused_at and hyprland focusHistoryID track the same focus events.
     hypr=$(jq -c --argjson pid "$kpid" \
-      '[.[] | select(.class == "kitty" and .pid == $pid)]
+      '[.[] | select(.pid == $pid)]
        | sort_by(.focusHistoryID)
        | map({workspace: .workspace.name, workspace_id: .workspace.id, hypr_address: .address})' \
       <<<"$clients")
