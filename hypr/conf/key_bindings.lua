@@ -4,6 +4,7 @@
 
 local roles = require("conf/roles")
 local sidebar = require("conf/sidebar")
+local workspaces = require("conf/workspaces")
 
 local mainMod = "SUPER"
 
@@ -46,7 +47,10 @@ bindp(
 	{ release = true }
 )
 -- bindp(mainMod .. " + W", hl.dsp.layout("togglesplit")) -- dwindle
-bindp(mainMod .. " + G", hl.dsp.group.toggle())
+bindp(mainMod .. " + G", function()
+	hl.dispatch(hl.dsp.group.toggle())
+	workspaces.refresh_smart_gaps()
+end)
 bindp(mainMod .. " + SHIFT + G", hl.dsp.group.lock_active({ action = "toggle" }))
 -- Also steps through the tabs of the sidebar
 bindp(mainMod .. " + bracketleft", function()

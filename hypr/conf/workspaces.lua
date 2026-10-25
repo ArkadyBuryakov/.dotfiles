@@ -4,6 +4,8 @@
 
 local roles = require("conf/roles")
 
+local M = {}
+
 hl.config({
 	general = {
 		-- Set default layout
@@ -85,9 +87,19 @@ hl.workspace_rule({ workspace = "special:config", on_created_empty = "gtk-launch
 -- https://wiki.hypr.land/Configuring/Basics/Workspace-Rules/#smart-gaps
 hl.workspace_rule({ workspace = "s[true]", gaps_out = 25, gaps_in = 12 })
 hl.workspace_rule({ workspace = "s[false] w[tv1] w[g0]", gaps_out = 0, gaps_in = 0 })
-hl.workspace_rule({ workspace = "s[false] w[tv1] w[g1]", gaps_out = 4, gaps_in = 4 })
+local group_gaps = hl.workspace_rule({ workspace = "s[false] w[tv1] w[g1]", gaps_out = 4, gaps_in = 4 })
 hl.workspace_rule({ workspace = "s[false] f[1]", gaps_out = 0, gaps_in = 0 })
 hl.window_rule({ match = { float = false, workspace = "w[tv1] w[g0] s[false]" }, border_size = 0 })
 hl.window_rule({ match = { float = false, workspace = "w[tv1] w[g0] s[false]" }, rounding = 0 })
 hl.window_rule({ match = { float = false, workspace = "f[1] s[false]" }, border_size = 0 })
 hl.window_rule({ match = { float = false, workspace = "f[1] s[false]" }, rounding = 0 })
+
+--- Re-apply the smart gaps rules. Hyprland re-checks workspace rules when a
+--- group is made but not when it is dissolved, so a lone window left by one
+--- keeps the group's gaps. Any rule change makes it re-check them all.
+function M.refresh_smart_gaps()
+	group_gaps:set_enabled(false)
+	group_gaps:set_enabled(true)
+end
+
+return M
