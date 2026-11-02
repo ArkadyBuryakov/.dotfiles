@@ -19,6 +19,7 @@ bun
 chromium
 clamav
 claude-code
+compsize
 devtools
 docker
 docker-buildx
