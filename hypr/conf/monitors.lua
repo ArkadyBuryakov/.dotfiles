@@ -9,6 +9,9 @@
 hl.monitor({ output = "eDP-1", mode = "1920x1200", position = "0x0", scale = 1.066667 }) -- Laptop screen
 hl.monitor({ output = "DP-1", mode = "3840x2160", position = "0x-1728", scale = 1.25 }) -- Home 4k screen
 hl.monitor({ output = "HDMI-A-1", mode = "3840x2160", position = "0x-1728", scale = 1.25 }) -- Desktop / 4k screen over HDMI
+-- Physical projector, matched by EDID so it doesn't inherit the 4k HDMI-A-1 rule
+-- (desc: rules take precedence over output-name rules).
+hl.monitor({ output = "desc:WSX SGD SX8 0x00000321", mode = "1280x720@60", position = "0x-720", scale = 1 })
 -- hl.monitor({ output = "DP-1", mode = "1920x1080", position = "0x-1920", scale = 1 })  -- Stub for external monitor
 -- Virtual output streamed to the projector (created by the projector cast script,
 -- see conf/roles.lua). 720p is the projector's native panel.
