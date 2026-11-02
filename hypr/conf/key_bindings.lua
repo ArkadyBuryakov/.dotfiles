@@ -11,7 +11,7 @@ local mainMod = "SUPER"
 -- Default programs
 local terminal = "kitty"
 local fileManager = "kitty yazi"
-local guiFileManager = "nautilus"
+local guiFileManager = "nautilus --new-window"
 local menu = "rofi"
 
 -- A window docked as a sidebar stays put: binds that would move or resize it
