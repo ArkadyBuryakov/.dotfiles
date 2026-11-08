@@ -51,7 +51,7 @@ bindp(mainMod .. " + G", function()
 	hl.dispatch(hl.dsp.group.toggle())
 	workspaces.refresh_smart_gaps()
 end)
-bindp(mainMod .. " + SHIFT + G", hl.dsp.group.lock_active({ action = "toggle" }))
+bindp(mainMod .. " + SHIFT + G", hl.dsp.group.lock({ action = "toggle" }))
 -- Also steps through the tabs of the sidebar
 bindp(mainMod .. " + bracketleft", function()
 	sidebar.cycle(-1)

@@ -80,8 +80,17 @@ hl.on("monitor.added", apply_monitor_bindings)
 hl.on("monitor.removed", apply_monitor_bindings)
 
 -- Workspace rules
-hl.workspace_rule({ workspace = "special:magic", on_created_empty = "Telegram & thunderbird" })
-hl.workspace_rule({ workspace = "special:config", on_created_empty = "gtk-launch org.arkady.config.desktop" })
+-- Launch apps when these special workspaces are first created empty
+local on_created_empty = {
+	["special:magic"] = "Telegram & thunderbird",
+	["special:config"] = "gtk-launch org.arkady.config.desktop",
+}
+hl.on("workspace.created", function(ws)
+	local cmd = ws and on_created_empty[ws.name]
+	if cmd and ws.is_empty then
+		hl.exec_cmd(cmd)
+	end
+end)
 
 -- Smart gaps
 -- https://wiki.hypr.land/Configuring/Basics/Workspace-Rules/#smart-gaps
