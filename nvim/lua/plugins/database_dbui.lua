@@ -11,6 +11,9 @@ return {
       "DBUIAddConnection",
       "DBUIFindBuffer",
     },
+    keys = {
+      { "<leader>S<tab>", "<cmd>DBUIToggle<cr>", desc = "Toggle DBUI" },
+    },
     init = function()
       -- Your DBUI configuration
       vim.g.db_ui_save_location = vim.fn.getcwd() .. "/.db_ui"
