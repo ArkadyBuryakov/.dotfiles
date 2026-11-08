@@ -40,6 +40,14 @@ hl.window_rule({
 	pin = true,
 })
 
+-- Title becomes "N Reminder(s)" once loaded, so match the initial one
+hl.window_rule({
+	name = "Float Thunderbird calendar reminders",
+	match = { class = "(org.mozilla.Thunderbird)", initial_title = "(Calendar Reminders)" },
+
+	float = true,
+})
+
 -- Supress fullscreen for some applications
 hl.window_rule({ match = { class = "(.*)" }, suppress_event = "maximize" })
 hl.window_rule({ match = { class = "(firefox)" }, fullscreen_state = "0 0" })
