@@ -33,6 +33,7 @@ CONFIG_FILES=(
   "teams-for-linux/config.json:teams-for-linux/config.json"
   "btop/themes/neutron.theme:btop/themes/neutron.theme"
   "k9s/skins/neutron.yaml:k9s/skins/neutron.yaml"
+  "claude-desktop/claude-desktop-flags.conf:claude-desktop-flags.conf"
 )
 
 for entry in "${CONFIG_FILES[@]}"; do
