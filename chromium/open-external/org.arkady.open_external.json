@@ -1,0 +1,7 @@
+{
+  "name": "org.arkady.open_external",
+  "description": "Open URLs from Chromium in the system URL handler",
+  "path": "/home/arkady/Documents/.dotfiles/chromium/open-external/open-external-host",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://ienpgbbiegeaealfikclppfcamelhnmk/"]
+}

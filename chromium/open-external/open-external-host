@@ -1,0 +1,38 @@
+#!/usr/bin/python3 -I
+"""Chromium native messaging host: opens the received http(s) URL with url-router."""
+import json
+import os
+import struct
+import subprocess
+import sys
+
+ROUTER = os.path.expanduser("~/Documents/.dotfiles/bin/url-router")
+
+
+def read_message():
+    raw = sys.stdin.buffer.read(4)
+    if len(raw) < 4:
+        return None
+    (length,) = struct.unpack("=I", raw)
+    return json.loads(sys.stdin.buffer.read(length))
+
+
+def send_message(obj):
+    data = json.dumps(obj).encode()
+    sys.stdout.buffer.write(struct.pack("=I", len(data)) + data)
+    sys.stdout.buffer.flush()
+
+
+msg = read_message() or {}
+url = msg.get("url", "")
+if isinstance(url, str) and url.startswith(("http://", "https://")):
+    subprocess.Popen(
+        [ROUTER, url],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    send_message({"ok": True})
+else:
+    send_message({"ok": False})
