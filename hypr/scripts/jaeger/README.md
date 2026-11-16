@@ -62,6 +62,6 @@ Card colors: yellow = busy, green = idle, red = waiting for input, gray = unknow
 
 ## Requirements
 
-- kitty with `allow_remote_control yes` and `listen_on unix:@mykitty`
+- kitty with `allow_remote_control socket-only` and `listen_on unix:@mykitty`
 - Hyprland with `focus_on_activate` enabled
 - `quickshell`, `jq`
