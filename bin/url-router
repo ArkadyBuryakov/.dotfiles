@@ -1,9 +1,20 @@
 #!/bin/bash
-# Default http(s) handler: sends Teams meeting/chat links to teams-for-linux,
-# everything else to Zen. Regex mirrors teams-for-linux's meetupJoinRegEx.
+# Default http(s) and msteams: handler. Teams meeting/chat/channel links open
+# as a chromeless Chromium app window (same profile as the "Teams (Web)" app,
+# see bin/webapp); everything else goes to Zen.
+# Link patterns mirror teams-for-linux's meetupJoinRegEx.
 teams_re='^https://teams\.(microsoft\.com|live\.com|cloud\.microsoft)/(v2/\?meetingjoin=|meet/|l/(app|call|channel|chat|entity|file|meet(ing|up-join)|message|task|team)/)'
 
-if [[ $# -eq 1 && $1 =~ $teams_re ]] && command -v teams-for-linux >/dev/null; then
-  exec teams-for-linux --gtk-version=3 "$1"
+url=${1-}
+# msteams: links (from Microsoft's "open in app" pages) as plain https
+case $url in
+  msteams://*) url=https://${url#msteams://} ;;
+  msteams:/*) url=https://teams.microsoft.com/${url#msteams:/} ;;
+esac
+
+if [[ $# -eq 1 && $url =~ $teams_re ]]; then
+  exec chromium --app="$url"
 fi
+# Any other converted msteams: link: Zen can't open the scheme, the https can
+[[ $url != "${1-}" ]] && set -- "$url"
 exec /opt/zen-browser-bin/zen-bin "$@"
