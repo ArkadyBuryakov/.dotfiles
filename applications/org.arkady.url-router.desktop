@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=URL Router
+Comment=Open Teams links in Teams for Linux, everything else in Zen
+Exec=/home/arkady/Documents/.dotfiles/bin/url-router %u
+Icon=zen-browser
+Type=Application
+Terminal=false
+NoDisplay=true
+MimeType=x-scheme-handler/http;x-scheme-handler/https;

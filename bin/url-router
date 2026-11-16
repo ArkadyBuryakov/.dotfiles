@@ -1,0 +1,9 @@
+#!/bin/bash
+# Default http(s) handler: sends Teams meeting/chat links to teams-for-linux,
+# everything else to Zen. Regex mirrors teams-for-linux's meetupJoinRegEx.
+teams_re='^https://teams\.(microsoft\.com|live\.com|cloud\.microsoft)/(v2/\?meetingjoin=|meet/|l/(app|call|channel|chat|entity|file|meet(ing|up-join)|message|task|team)/)'
+
+if [[ $# -eq 1 && $1 =~ $teams_re ]] && command -v teams-for-linux >/dev/null; then
+  exec teams-for-linux --gtk-version=3 "$1"
+fi
+exec /opt/zen-browser-bin/zen-bin "$@"
