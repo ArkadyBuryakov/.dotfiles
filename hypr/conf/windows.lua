@@ -67,6 +67,21 @@ hl.window_rule({
 })
 hl.window_rule({ match = { class = "(org.telegram.desktop)", title = "(Media viewer)" }, float = true, maximize = true })
 
+-- MEGAsync's tray popup is a frameless fixed-size Qt window; tiled, it gets
+-- stretched and renders broken. Its other windows have different titles.
+-- It hides itself on focus loss, so with follow_mouse merely moving the cursor
+-- off it would close it: keep focus on it while open (Esc or the tray icon
+-- closes it). Placed under the tray, top right.
+hl.window_rule({
+	name = "MEGAsync tray popup",
+	match = { class = "^(megasync)$", title = "^(MEGAsync)$" },
+
+	float = true,
+	stay_focused = true,
+	size = { 402, 564 },
+	move = { "monitor_w-window_w-12", "42" },
+})
+
 -- Float some tui menus
 hl.window_rule({
 	name = "Antivirus Threat Manager",
