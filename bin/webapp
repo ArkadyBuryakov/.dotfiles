@@ -1,0 +1,23 @@
+#!/bin/bash
+# Open a URL as a chromeless Chromium app window, or focus it if already open.
+# Usage: webapp <url>
+#
+# Chromium names --app windows "chrome-<host>_<path with / as _>-<profile>",
+# e.g. chrome-outlook.cloud.microsoft__mail_-Default. The profile suffix is
+# ignored so the match works whichever profile Chromium opens it in.
+set -euo pipefail
+
+url=${1:?usage: webapp <url>}
+rest=${url#*://}
+host=${rest%%/*}
+path=${rest#"$host"}; path=${path%%[?#]*}; path=${path:-/}
+prefix="chrome-${host}_${path//\//_}-"
+
+address=$(hyprctl clients -j | jq -r --arg p "$prefix" \
+  'map(select(.class | startswith($p))) | sort_by(.focusHistoryID) | .[0].address // empty')
+
+if [[ -n $address ]]; then
+  hyprctl dispatch "hl.dsp.focus({ window = \"address:$address\" })" >/dev/null
+else
+  setsid -f chromium --app="$url" >/dev/null 2>&1
+fi
