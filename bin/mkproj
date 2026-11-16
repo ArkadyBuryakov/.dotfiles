@@ -19,6 +19,9 @@ of creating an empty project, e.g.
 The domain is matched case-insensitively: an exact match wins, otherwise
 a substring match is used (fzf picker if several match). An unknown domain
 is created after confirmation.
+
+If the domain directory has a direnv .envrc, it is loaded first, so a
+per-domain GH_CONFIG_DIR selects which gh account clones the repo.
 EOF
 }
 
@@ -61,6 +64,18 @@ if [[ "$name" == (*://*|*@*:*|*.git) ]]; then
   url="$name"
   name="${${${${url%/}%.git}%/}##*[/:]}"
   [[ -n "$name" ]] || { echo "mkproj: cannot derive project name from '$url'" >&2; exit 1; }
+fi
+
+# load the domain's .envrc (e.g. a per-domain GH_CONFIG_DIR) so the clone
+# and the editor see the same environment as an interactive shell there
+if [[ -d "$root/$domain" ]] && (( $+commands[direnv] )); then
+  eval "$(cd "$root/$domain" && direnv export zsh)"
+fi
+
+# with a per-domain gh profile, clone GitHub over https so gh's credentials
+# are used instead of the default ssh key
+if [[ -n "$GH_CONFIG_DIR" && "$url" == git@github.com:* ]]; then
+  url="https://github.com/${url#git@github.com:}"
 fi
 
 dir="$root/$domain/$name"

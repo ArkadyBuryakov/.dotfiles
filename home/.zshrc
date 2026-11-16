@@ -199,3 +199,6 @@ alias wft="workforest tui"
 alias wfr="workforest run"
 alias wfm="workforest run make"
 
+
+# direnv (per-directory env via .envrc)
+eval "$(direnv hook zsh)"

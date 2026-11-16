@@ -27,3 +27,7 @@
 	required = true
 [credential "https://git.heroku.com"]
 	helper = !heroku git:credentials
+
+# Machine-local overrides (not tracked)
+[include]
+	path = ~/.gitconfig.local
