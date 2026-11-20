@@ -1,12 +1,80 @@
 #!/usr/bin/python3 -I
-"""Chromium native messaging host: opens the received http(s) URL with url-router."""
+"""Native messaging host for the open-external Chromium extension.
+
+Host mode (started by Chromium, one long-lived port):
+  - Sends chromium/webapps.json to the extension as {"type": "config", ...}
+    on connect and whenever the file changes.
+  - {"type": "open", "url"} from the extension: open the URL with url-router.
+  - Listens on $XDG_RUNTIME_DIR/chromium-open-external.sock. A request
+    "<app id> <url>" sent there is forwarded to the extension as
+    {"type": "navigate", "id", "app", "url"}; the extension loads it in that
+    app's open window and answers {"type": "result", "id", "ok"}, which goes
+    back to the socket as ok/no.
+
+Client mode, used by `webapp route`:
+  open-external-host --navigate URL --app ID [--wait SECONDS]
+  Exit status 0 once the extension loaded URL in the app's window; retries
+  until the deadline (Chromium/the app may still be starting), then exits 1.
+"""
+import atexit
 import json
 import os
+import socket
 import struct
 import subprocess
 import sys
+import threading
+import time
 
-ROUTER = os.path.expanduser("~/Documents/.dotfiles/bin/url-router")
+DOTFILES = os.path.expanduser("~/Documents/.dotfiles")
+ROUTER = os.path.join(DOTFILES, "bin/url-router")
+CONFIG = os.path.join(DOTFILES, "chromium/webapps.json")
+SOCKET = os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}",
+    "chromium-open-external.sock",
+)
+REPLY_TIMEOUT = 3
+
+
+# --- Client mode --------------------------------------------------------------
+
+def navigate_once(app, url):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(REPLY_TIMEOUT + 1)
+        s.connect(SOCKET)
+        s.sendall(f"{app} {url}\n".encode())
+        return s.makefile().readline().strip() == "ok"
+
+
+def client(argv):
+    url = argv[argv.index("--navigate") + 1]
+    app = argv[argv.index("--app") + 1]
+    wait = float(argv[argv.index("--wait") + 1]) if "--wait" in argv else 0
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            if navigate_once(app, url):
+                return 0
+        except OSError:
+            pass
+        if time.monotonic() >= deadline:
+            return 1
+        time.sleep(0.5)
+
+
+# --- Host mode ----------------------------------------------------------------
+
+out_lock = threading.Lock()
+pending = {}  # id -> [threading.Event, ok]
+pending_lock = threading.Lock()
+next_id = 0
+
+
+def send(obj):
+    data = json.dumps(obj).encode()
+    with out_lock:
+        sys.stdout.buffer.write(struct.pack("=I", len(data)) + data)
+        sys.stdout.buffer.flush()
 
 
 def read_message():
@@ -17,22 +85,107 @@ def read_message():
     return json.loads(sys.stdin.buffer.read(length))
 
 
-def send_message(obj):
-    data = json.dumps(obj).encode()
-    sys.stdout.buffer.write(struct.pack("=I", len(data)) + data)
-    sys.stdout.buffer.flush()
+def open_url(url):
+    if isinstance(url, str) and url.startswith(("http://", "https://")):
+        subprocess.Popen(
+            [ROUTER, url],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
 
 
-msg = read_message() or {}
-url = msg.get("url", "")
-if isinstance(url, str) and url.startswith(("http://", "https://")):
-    subprocess.Popen(
-        [ROUTER, url],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    send_message({"ok": True})
-else:
-    send_message({"ok": False})
+def handle_client(conn):
+    global next_id
+    with conn:
+        conn.settimeout(REPLY_TIMEOUT)
+        try:
+            app, _, url = conn.makefile().readline().strip().partition(" ")
+        except OSError:
+            return
+        if not app or not url.startswith("https://"):
+            conn.sendall(b"no\n")
+            return
+        with pending_lock:
+            next_id += 1
+            req_id = next_id
+            entry = pending[req_id] = [threading.Event(), False]
+        send({"type": "navigate", "id": req_id, "app": app, "url": url})
+        entry[0].wait(REPLY_TIMEOUT)
+        with pending_lock:
+            pending.pop(req_id, None)
+        try:
+            conn.sendall(b"ok\n" if entry[1] else b"no\n")
+        except OSError:
+            pass
+
+
+def serve():
+    # Another live host (e.g. a second profile) already owns the socket
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+            probe.connect(SOCKET)
+        return
+    except OSError:
+        pass
+    try:
+        os.unlink(SOCKET)
+    except FileNotFoundError:
+        pass
+    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    old_umask = os.umask(0o177)
+    srv.bind(SOCKET)
+    os.umask(old_umask)
+    srv.listen()
+    inode = os.stat(SOCKET).st_ino
+
+    def cleanup():
+        try:
+            if os.stat(SOCKET).st_ino == inode:
+                os.unlink(SOCKET)
+        except OSError:
+            pass
+
+    atexit.register(cleanup)
+    while True:
+        conn, _ = srv.accept()
+        threading.Thread(target=handle_client, args=(conn,), daemon=True).start()
+
+
+def watch_config():
+    """Send the config now and again after every change."""
+    last = None
+    while True:
+        try:
+            mtime = os.stat(CONFIG).st_mtime_ns
+            if mtime != last:
+                with open(CONFIG) as f:
+                    config = json.load(f)
+                send({"type": "config", **config})
+                last = mtime
+        except (OSError, ValueError) as e:
+            # Missing or half-written file: keep the last good config
+            print(f"open-external-host: config: {e}", file=sys.stderr)
+        time.sleep(2)
+
+
+def host():
+    threading.Thread(target=watch_config, daemon=True).start()
+    threading.Thread(target=serve, daemon=True).start()
+    while (msg := read_message()) is not None:
+        kind = msg.get("type")
+        if kind == "open":
+            open_url(msg.get("url"))
+        elif kind == "result":
+            with pending_lock:
+                entry = pending.get(msg.get("id"))
+            if entry:
+                entry[1] = bool(msg.get("ok"))
+                entry[0].set()
+
+
+if __name__ == "__main__":
+    if "--navigate" in sys.argv:
+        sys.exit(client(sys.argv))
+    host()

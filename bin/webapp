@@ -1,23 +1,106 @@
 #!/bin/bash
-# Open a URL as a chromeless Chromium app window, or focus it if already open.
-# Usage: webapp <url>
+# Chromium web apps defined in chromium/webapps.json.
+#
+#   webapp open <id>     focus the app's window, or open it
+#   webapp focus <id>    focus the app's window; exit 1 if it isn't open
+#   webapp route <url>   if an app captures <url>, load it in that app's window
+#                        (opening the app first if needed); exit 1 otherwise
+#   webapp sync          (re)generate launcher entries for all apps
+#   webapp list          list apps
 #
 # Chromium names --app windows "chrome-<host>_<path with / as _>-<profile>",
-# e.g. chrome-outlook.cloud.microsoft__mail_-Default. The profile suffix is
-# ignored so the match works whichever profile Chromium opens it in.
+# e.g. chrome-outlook.cloud.microsoft__mail_-Profile_2. Windows are matched by
+# the app's url without the profile suffix, so any profile works.
 set -euo pipefail
 
-url=${1:?usage: webapp <url>}
-rest=${url#*://}
-host=${rest%%/*}
-path=${rest#"$host"}; path=${path%%[?#]*}; path=${path:-/}
-prefix="chrome-${host}_${path//\//_}-"
+DOTFILES=$HOME/Documents/.dotfiles
+CONFIG=$DOTFILES/chromium/webapps.json
+HOST=$DOTFILES/chromium/open-external/open-external-host
+DESKTOP_DIR=$HOME/.local/share/applications
+DESKTOP_PREFIX=org.arkady.webapp-
 
-address=$(hyprctl clients -j | jq -r --arg p "$prefix" \
-  'map(select(.class | startswith($p))) | sort_by(.focusHistoryID) | .[0].address // empty')
+die() { echo "webapp: $*" >&2; exit 2; }
 
-if [[ -n $address ]]; then
+app_field() { # <id> <jq path>
+  jq -er --arg id "$1" ".apps[\$id]$2" "$CONFIG"
+}
+
+app_url() {
+  app_field "$1" .url 2>/dev/null || die "unknown app '$1' (see: webapp list)"
+}
+
+window_address() { # <url>
+  local rest host path
+  rest=${1#*://}
+  host=${rest%%/*}
+  path=${rest#"$host"}; path=${path%%[?#]*}; path=${path:-/}
+  hyprctl clients -j | jq -r --arg p "chrome-${host}_${path//\//_}-" \
+    'map(select(.class | startswith($p))) | sort_by(.focusHistoryID) | .[0].address // empty'
+}
+
+focus() { # <id>
+  local address
+  address=$(window_address "$(app_url "$1")")
+  [[ -n $address ]] || return 1
   hyprctl dispatch "hl.dsp.focus({ window = \"address:$address\" })" >/dev/null
-else
-  setsid -f chromium --app="$url" >/dev/null 2>&1
-fi
+}
+
+open() { # <id>
+  focus "$1" || setsid -f chromium --app="$(app_url "$1")" >/dev/null 2>&1
+}
+
+route() { # <url>
+  local url=$1 id pattern wait
+  while IFS=$'\t' read -r id pattern; do
+    [[ $url =~ $pattern ]] || continue
+    if focus "$id"; then
+      wait=3
+    else
+      open "$id"
+      wait=30 # Chromium and the app starting up
+    fi
+    # The extension loads the link in the app's window
+    "$HOST" --navigate "$url" --app "$id" --wait "$wait" && return 0
+    # Extension unreachable: at least open the link
+    setsid -f chromium --app="$url" >/dev/null 2>&1
+    return 0
+  done < <(jq -r '.apps | to_entries[] | .key as $id | .value.capture[]? | [$id, .] | @tsv' "$CONFIG")
+  return 1
+}
+
+sync() {
+  local id path
+  mkdir -p "$DESKTOP_DIR"
+  for path in "$DESKTOP_DIR/$DESKTOP_PREFIX"*.desktop; do
+    [[ -e $path ]] || continue
+    id=${path##*/"$DESKTOP_PREFIX"}; id=${id%.desktop}
+    jq -e --arg id "$id" '.apps | has($id)' "$CONFIG" >/dev/null || { rm -f "$path"; echo "removed $id"; }
+  done
+  for id in $(jq -r '.apps | keys[]' "$CONFIG"); do
+    cat > "$DESKTOP_DIR/$DESKTOP_PREFIX$id.desktop" <<EOF
+[Desktop Entry]
+Name=$(app_field "$id" .name)
+Comment=$(app_field "$id" '.comment // ""')
+Exec=$DOTFILES/bin/webapp open $id
+Icon=$(app_field "$id" '.icon // "web-browser"')
+Categories=$(app_field "$id" '.categories // "Network;"')
+Version=1.0
+Type=Application
+Terminal=false
+EOF
+    echo "synced $id"
+  done
+  update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
+  rm -f "$HOME/.cache/rofi3.druncache"
+}
+
+list() {
+  jq -r '.apps | to_entries[] | "\(.key)\t\(.value.name)\t\(.value.url)"' "$CONFIG" | column -t -s $'\t'
+}
+
+case ${1-} in
+  open | focus) [[ -n ${2-} ]] || die "usage: webapp $1 <id>"; "$1" "$2" ;;
+  route) [[ -n ${2-} ]] || die "usage: webapp route <url>"; route "$2" ;;
+  sync | list) "$1" ;;
+  *) sed -n '2,12s/^# \{0,1\}//p' "$0" >&2; exit 2 ;;
+esac

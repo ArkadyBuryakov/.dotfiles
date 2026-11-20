@@ -1,0 +1,50 @@
+{
+  "//": [
+    "Chromium web apps (chromeless --app windows). Read by bin/webapp, bin/url-router",
+    "and the open-external extension (via its native host; changes apply live).",
+    "Per app:",
+    "  name, comment, categories, icon  launcher entry (run `webapp sync` after edits);",
+    "                                   icon is a theme name, e.g. icons/hicolor/*/apps/<icon>.png",
+    "  url             what the app window opens; also identifies its window",
+    "  hosts           the app's own sites: links to them stay inside the app",
+    "  external_links  links the app opens in new tabs/windows go to the system URL handler",
+    "  capture         regexes (POSIX ERE) of links from anywhere that load in this app's",
+    "                  open window, or open it first",
+    "keep_hosts: sign-in and other sites that always stay in Chromium."
+  ],
+  "keep_hosts": [
+    "login.microsoftonline.com",
+    "login.microsoft.com",
+    "login.live.com",
+    "account.live.com"
+  ],
+  "apps": {
+    "outlook": {
+      "name": "Outlook",
+      "comment": "Outlook web mail",
+      "categories": "Network;Email;",
+      "icon": "org.arkady.outlook",
+      "url": "https://outlook.cloud.microsoft/mail/",
+      "hosts": [
+        "outlook.cloud.microsoft",
+        "outlook.office.com",
+        "outlook.office365.com",
+        "outlook.live.com"
+      ],
+      "external_links": true,
+      "capture": []
+    },
+    "teams": {
+      "name": "Teams (Web)",
+      "comment": "Microsoft Teams for work",
+      "categories": "Network;Chat;",
+      "icon": "org.arkady.teams",
+      "url": "https://teams.cloud.microsoft/",
+      "hosts": ["teams.cloud.microsoft", "teams.microsoft.com", "teams.live.com"],
+      "external_links": true,
+      "capture": [
+        "^https://teams\\.(microsoft\\.com|live\\.com|cloud\\.microsoft)/(v2/\\?meetingjoin=|meet/|l/(app|call|channel|chat|entity|file|meet(ing|up-join)|message|task|team)/)"
+      ]
+    }
+  }
+}

@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=Teams (Web)
-Comment=Microsoft Teams for work in a Chromium app window
-Exec=/home/arkady/Documents/.dotfiles/bin/webapp https://teams.cloud.microsoft/
-Icon=org.arkady.teams
-Categories=Network;Chat;
-Version=1.0
-Type=Application
-Terminal=false

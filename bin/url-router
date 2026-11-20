@@ -1,9 +1,7 @@
 #!/bin/bash
-# Default http(s) and msteams: handler. Teams meeting/chat/channel links open
-# as a chromeless Chromium app window (same profile as the "Teams (Web)" app,
-# see bin/webapp); everything else goes to Zen.
-# Link patterns mirror teams-for-linux's meetupJoinRegEx.
-teams_re='^https://teams\.(microsoft\.com|live\.com|cloud\.microsoft)/(v2/\?meetingjoin=|meet/|l/(app|call|channel|chat|entity|file|meet(ing|up-join)|message|task|team)/)'
+# Default http(s) and msteams: handler. Links that a web app in
+# chromium/webapps.json captures load in that app's window (see `webapp
+# route`); everything else goes to Zen.
 
 url=${1-}
 # msteams: links (from Microsoft's "open in app" pages) as plain https
@@ -12,9 +10,10 @@ case $url in
   msteams:/*) url=https://teams.microsoft.com/${url#msteams:/} ;;
 esac
 
-if [[ $# -eq 1 && $url =~ $teams_re ]]; then
-  exec chromium --app="$url"
+if [[ $# -eq 1 ]] && "$HOME/Documents/.dotfiles/bin/webapp" route "$url"; then
+  exit 0
 fi
+
 # Any other converted msteams: link: Zen can't open the scheme, the https can
 [[ $url != "${1-}" ]] && set -- "$url"
 exec /opt/zen-browser-bin/zen-bin "$@"

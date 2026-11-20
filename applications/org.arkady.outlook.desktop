@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=Outlook
-Comment=Outlook web mail in a Chromium app window
-Exec=/home/arkady/Documents/.dotfiles/bin/webapp https://outlook.cloud.microsoft/mail/
-Icon=org.arkady.outlook
-Categories=Network;Email;
-Version=1.0
-Type=Application
-Terminal=false
