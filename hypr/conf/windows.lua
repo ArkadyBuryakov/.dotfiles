@@ -69,15 +69,15 @@ hl.window_rule({ match = { class = "(org.telegram.desktop)", title = "(Media vie
 
 -- MEGAsync's tray popup is a frameless fixed-size Qt window; tiled, it gets
 -- stretched and renders broken. Its other windows have different titles.
--- It hides itself on focus loss, so with follow_mouse merely moving the cursor
--- off it would close it: keep focus on it while open (Esc or the tray icon
--- closes it). Placed under the tray, top right.
+-- Placed under the tray, top right.
+-- No stay_focused: Qt5's D-Bus tray treats ANY notification's ActionInvoked as
+-- a click on its own message, so clicking a mako notification pops this open.
+-- Letting it close on focus loss keeps those accidental opens harmless.
 hl.window_rule({
 	name = "MEGAsync tray popup",
 	match = { class = "^(megasync)$", title = "^(MEGAsync)$" },
 
 	float = true,
-	stay_focused = true,
 	size = { 402, 564 },
 	move = { "monitor_w-window_w-12", "42" },
 })
