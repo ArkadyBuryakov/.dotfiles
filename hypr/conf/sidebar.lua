@@ -133,7 +133,8 @@ end
 ---@param top integer height the tabs take above the window
 ---@param border integer
 ---@param focus boolean
-function M.show(address, monitor, side, strip, top, border, focus)
+---@param warp boolean|nil false: focus it but leave the cursor where it is (a click on its tab)
+function M.show(address, monitor, side, strip, top, border, focus, warp)
 	local w = hl.get_window("address:" .. address)
 	local m = hl.get_monitor(monitor)
 	if not w or not m then
@@ -162,7 +163,13 @@ function M.show(address, monitor, side, strip, top, border, focus)
 	local width, tall = strip - 2 * border, math.floor(height - top - 2 * border)
 	hl.dispatch(hl.dsp.window.resize({ x = width, y = tall, window = w }))
 	hl.dispatch(hl.dsp.window.move({ x = x, y = y, window = w }))
-	if focus then
+	if focus and warp == false then
+		-- Only for this one focus: the cursor still follows it everywhere else
+		local no_warps = hl.get_config("cursor.no_warps")
+		hl.config({ cursor = { no_warps = true } })
+		hl.dispatch(hl.dsp.focus({ window = w }))
+		hl.config({ cursor = { no_warps = no_warps } })
+	elseif focus then
 		hl.dispatch(hl.dsp.focus({ window = w }))
 		-- Focusing the window that already has the focus leaves the cursor
 		-- behind, and the windows rearranged under it would take the focus

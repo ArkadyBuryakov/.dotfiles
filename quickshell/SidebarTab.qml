@@ -30,6 +30,6 @@ Rectangle {
         id: mouse
         anchors.fill: parent
         hoverEnabled: true
-        onClicked: Sidebar.select(tab.modelData)
+        onClicked: Sidebar.select(tab.modelData, false)
     }
 }

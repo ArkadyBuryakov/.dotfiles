@@ -161,20 +161,21 @@ Singleton {
         run(layout(name, true));
     }
 
-    // Bring a window of a sidebar on show.
-    function select(address: string) {
+    // Bring a window of a sidebar on show. Unless warping, the focus goes to
+    // it but the cursor stays put (a click on its tab).
+    function select(address: string, warp: bool) {
         const name = owner(address);
         if (!name)
             return;
         set(name, Object.assign({}, sidebars[name], { active: address, open: true }));
-        run(layout(name, true));
+        run(layout(name, true, warp));
     }
 
     // Step through the windows of a sidebar.
     function cycle(name: string, step: int) {
         const held = windows(name);
         if (held.length > 1)
-            select(held[(held.indexOf(active(name)) + step + held.length) % held.length]);
+            select(held[(held.indexOf(active(name)) + step + held.length) % held.length], true);
     }
 
     // Release every window of a sidebar.
@@ -196,13 +197,14 @@ Singleton {
     }
 
     // Lua putting the windows of a sidebar where they belong: the active one
-    // into the strip (taking the focus, if asked), the rest out of sight.
-    function layout(name: string, focus: bool): string {
+    // into the strip (taking the focus, if asked, and the cursor with it
+    // unless warp is false), the rest out of sight.
+    function layout(name: string, focus: bool, warp: var): string {
         const screen = Quickshell.screens.find(screen => screen.name === name);
         const shown = screen && isOpen(name) ? active(name) : "";
         // Geometry comes from the compositor: it is current even right
         // after the monitor changed its mode or scale.
-        let script = shown ? `require("conf/sidebar").show("${shown}", "${name}", "${side(name)}", ${stripWidth(screen)}, ${tabs(name)}, ${border}, ${focus})\n` : "";
+        let script = shown ? `require("conf/sidebar").show("${shown}", "${name}", "${side(name)}", ${stripWidth(screen)}, ${tabs(name)}, ${border}, ${focus}, ${warp !== false})\n` : "";
         for (const address of windows(name)) {
             if (address !== shown)
                 script += `require("conf/sidebar").stash("${address}")\n`;
@@ -308,7 +310,7 @@ Singleton {
                     root.remove(args[0]);
                     break;
                 case "select":
-                    root.select(args[0]);
+                    root.select(args[0], true);
                     break;
                 case "drag":
                     root.dragging = args[0] === "1";
