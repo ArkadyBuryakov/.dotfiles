@@ -103,9 +103,13 @@ bindp("code:123", hl.dsp.exec_cmd("~/.config/hypr/scripts/volume.sh up"), { lock
 bindp("code:122", hl.dsp.exec_cmd("~/.config/hypr/scripts/volume.sh down"), { locked = true, repeating = true })
 bindp("xf86audiomute", hl.dsp.exec_cmd("~/.config/hypr/scripts/volume.sh toggle"), { locked = true })
 bindp("xf86audiomicmute", hl.dsp.exec_cmd("~/.config/hypr/scripts/volume.sh mic"), { locked = true })
-bindp("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"))
-bindp("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"))
-bindp("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"))
+-- Media keys (keyboard and Bluetooth headsets via AVRCP); locked so they keep
+-- working on the lock screen
+bindp("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
+bindp("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
+bindp("XF86AudioStop", hl.dsp.exec_cmd("playerctl stop"), { locked = true })
+bindp("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"), { locked = true })
+bindp("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"), { locked = true })
 bindp(mainMod .. " + SHIFT + f23", hl.dsp.exec_cmd('zen-browser --new-window "https://claude.ai/new"'))
 
 -- Move focus with mainMod + arrow keys
