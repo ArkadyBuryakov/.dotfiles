@@ -5,17 +5,31 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 
-// Regular windows docked as a sidebar. Each monitor has its own: a list of
-// windows, one of which is on show - floated, pinned (so it follows every
-// workspace of the monitor) and laid over a strip on either side of the screen
-// that SidebarPanel keeps free of tiled windows. The others, and all of them while
-// the sidebar is closed, wait on a hidden workspace.
+// Regular windows docked as a sidebar: a list of windows, one of which is on
+// show - floated, pinned (so it follows every workspace of the monitor) and
+// laid over a strip on either side of the screen that SidebarPanel keeps free
+// of tiled windows. The others, and all of them while the sidebar is closed,
+// wait on a hidden workspace.
+//
+// Depending on `mode`, each monitor has a sidebar of its own, or there is a
+// single one for all of them: opened on one monitor, it leaves the one it was
+// on, and takes its windows (and the one on show) along.
 //
 // Driven by the binds in hypr/conf/key_bindings.lua: hypr/conf/sidebar.lua
 // turns them into `sidebar <command>` custom events, and does the window
 // handling asked back from here.
 Singleton {
     id: root
+
+    // "monitor": a sidebar per monitor. "single": one sidebar, on whichever
+    // monitor it was last opened on. Set in config.yaml (Config.qml); the
+    // sidebars are carried over when it changes (see convert).
+    // Anything but "single" (even nothing, should Config fail to load) is
+    // "monitor"
+    readonly property string mode: kind(Config.sidebarMode)
+    readonly property bool single: mode === "single"
+    // Mode the sidebars below are kept in: behind mode until converted
+    property string held: ""
 
     readonly property int defaultWidth: 600
     readonly property int minWidth: 300
@@ -31,7 +45,8 @@ Singleton {
     readonly property int tabHeight: 18
 
     // Output name -> { windows: addresses ("0x..."), active: the address on
-    // show, open }
+    // show, open }. In single mode the one sidebar is under "*", and also
+    // has screen: the output it is on (or was, while closed).
     // Kept here and only mirrored into the state file: an adapter property
     // set twice in a row still reads back its first value
     property var sidebars: ({})
@@ -41,22 +56,50 @@ Singleton {
     // The state file has been read back. Not necessarily by the time this
     // is created: after a hot reload the adapter fills in later
     property bool restored: false
+    // The state file is read (or found missing): restored once the config
+    // is in too, so that its sidebars are taken over in the right mode
+    property bool stateRead: false
     // Output name -> strip width, remembered while the sidebar is empty
     readonly property var widths: state.widths
 
     // A window is being dragged around: an open sidebar shows where to drop it
     property bool dragging: false
 
+    function kind(mode: var): string {
+        return mode === "single" ? "single" : "monitor";
+    }
+
+    // Key of the sidebar in charge of an output
+    function key(name: string): string {
+        return single ? "*" : name;
+    }
+
+    // Output a sidebar is on, by its key
+    function screenOf(key: string): string {
+        return single ? (sidebars[key]?.screen ?? "") : key;
+    }
+
+    // Sidebar in charge of an output, open there or not
+    function record(name: string): var {
+        return sidebars[key(name)];
+    }
+
+    // Whether the sidebar in charge of an output is the one on it (always,
+    // but in single mode)
+    function isHere(name: string): bool {
+        return !single || record(name)?.screen === name;
+    }
+
     function windows(name: string): var {
-        return sidebars[name]?.windows ?? [];
+        return record(name)?.windows ?? [];
     }
 
     function active(name: string): string {
-        return sidebars[name]?.active ?? "";
+        return record(name)?.active ?? "";
     }
 
     function isOpen(name: string): bool {
-        return sidebars[name]?.open === true;
+        return record(name)?.open === true && isHere(name);
     }
 
     function side(name: string): string {
@@ -84,19 +127,24 @@ Singleton {
         // Would write the empty state over the one still to be read
         if (!restored)
             return;
+        state.mode = held;
         state.sidebars = sidebars;
         state.sides = sides;
         file.writeAdapter();
     }
 
+    // Store the sidebar in charge of an output. In single mode that moves it
+    // onto the output.
     function set(name: string, sidebar: var) {
-        sidebars = Object.assign({}, sidebars, { [name]: sidebar });
+        const record = single ? Object.assign({}, sidebar, { screen: name }) : sidebar;
+        sidebars = Object.assign({}, sidebars, { [key(name)]: record });
         save();
     }
 
     // Name of the output whose sidebar holds the window
     function owner(address: string): string {
-        return Object.keys(sidebars).find(name => sidebars[name].windows.includes(address)) ?? "";
+        const held = Object.keys(sidebars).find(key => sidebars[key].windows.includes(address));
+        return held ? screenOf(held) : "";
     }
 
     // Put a window into the sidebar of a monitor, on show. Given a side, the
@@ -106,8 +154,10 @@ Singleton {
             return;
         if (side === "left" || side === "right")
             sides = Object.assign({}, sides, { [name]: side });
+        // Over from another sidebar. The single one just moves along.
         const from = owner(address);
-        if (from && from !== name)
+        const moved = from && key(from) !== key(name);
+        if (moved)
             detach(address);
         const held = windows(name);
         set(name, {
@@ -115,7 +165,7 @@ Singleton {
             active: address,
             open: true
         });
-        run((from && from !== name ? layout(from, false) : "") + layout(name, true));
+        run((moved ? layout(from, false) : "") + layout(name, true));
     }
 
     // Stop tracking a window, without touching it: the next one takes over,
@@ -124,7 +174,7 @@ Singleton {
         const name = owner(address);
         if (!name)
             return "";
-        const sidebar = sidebars[name];
+        const sidebar = record(name);
         const rest = sidebar.windows.filter(window => window !== address);
         const next = rest[Math.min(sidebar.windows.indexOf(address), rest.length - 1)] ?? "";
         set(name, {
@@ -142,7 +192,8 @@ Singleton {
             run(`require("conf/sidebar").release("${address}")\n` + layout(name, false));
     }
 
-    // Open the sidebar of a monitor, empty as it may be, or close it.
+    // Open the sidebar of a monitor, empty as it may be, or close it. The
+    // single sidebar, open on another monitor, comes over instead.
     function toggle(name: string) {
         if (!Quickshell.screens.some(screen => screen.name === name))
             return;
@@ -167,7 +218,7 @@ Singleton {
         const name = owner(address);
         if (!name)
             return;
-        set(name, Object.assign({}, sidebars[name], { active: address, open: true }));
+        set(name, Object.assign({}, record(name), { active: address, open: true }));
         run(layout(name, true, warp));
     }
 
@@ -180,9 +231,12 @@ Singleton {
 
     // Release every window of a sidebar.
     function dissolve(name: string) {
+        // The single sidebar is elsewhere
+        if (!isHere(name))
+            return;
         const held = windows(name);
         const rest = Object.assign({}, sidebars);
-        delete rest[name];
+        delete rest[key(name)];
         sidebars = rest;
         save();
         // Not right away: on its way out a monitor leaves its workspaces
@@ -200,6 +254,10 @@ Singleton {
     // into the strip (taking the focus, if asked, and the cursor with it
     // unless warp is false), the rest out of sight.
     function layout(name: string, focus: bool, warp: var): string {
+        // The single sidebar is elsewhere: its windows are none of this
+        // output's business
+        if (!isHere(name))
+            return "";
         const screen = Quickshell.screens.find(screen => screen.name === name);
         const shown = screen && isOpen(name) ? active(name) : "";
         // Geometry comes from the compositor: it is current even right
@@ -220,17 +278,79 @@ Singleton {
     // Take the sidebars over from the state file, once it is read (or
     // found missing), and check them against the windows there are.
     function restore() {
-        if (restored)
+        if (restored || !stateRead || !Config.loaded)
             return;
-        sidebars = state.sidebars;
+        // Written before there was a mode: one sidebar per monitor
+        const from = kind(state.mode);
+        sidebars = convert(state.sidebars ?? {}, from);
+        held = single ? "single" : "monitor";
         sides = state.sides ?? {};
         restored = true;
+        if (from !== held)
+            save();
         check.running = true;
     }
 
+    // Sidebars stored in another mode, as this one keeps them. Never drops a
+    // window: what is stored in neither shape is kept as it is. The windows
+    // themselves are put in place by check, once the dead ones are dropped.
+    function convert(stored: var, from: string): var {
+        const one = stored["*"];
+        if (kind(from) === (single ? "single" : "monitor") || (!single && !one))
+            return stored;
+        const focused = Hyprland.focusedMonitor?.name ?? "";
+        if (!single) {
+            // The single sidebar becomes the one of the monitor it is on
+            const screen = one.screen || focused || (Quickshell.screens[0]?.name ?? "");
+            return screen ? { [screen]: { windows: one.windows ?? [], active: one.active ?? "", open: one.open === true } } : stored;
+        }
+        // All windows go into one sidebar. It goes where one is open,
+        // preferably on the focused monitor, or else where one has windows.
+        const names = Object.keys(stored).filter(name => stored[name].windows?.length > 0 || stored[name].open);
+        const open = names.filter(name => stored[name].open);
+        const pick = list => list.includes(focused) ? focused : list[0];
+        const screen = pick(open) ?? pick(names);
+        if (!screen)
+            return {};
+        // Its own tabs first: the one on show stays so
+        const windows = [screen].concat(names.filter(name => name !== screen)).reduce((all, name) => all.concat(stored[name].windows ?? []), []);
+        return {
+            "*": {
+                windows: windows,
+                active: stored[screen].active || (windows[0] ?? ""),
+                open: open.length > 0,
+                screen: screen
+            }
+        };
+    }
+
+    // Switched while running: carry the sidebars over and put their windows
+    // where the new mode has them. Not from inside the change: single may not
+    // have followed mode yet.
+    onModeChanged: Qt.callLater(switchMode)
+
+    function switchMode() {
+        if (!restored || held === mode)
+            return;
+        sidebars = convert(sidebars, held);
+        held = mode;
+        save();
+        for (const screen of Quickshell.screens)
+            apply(screen.name);
+    }
+
     Component.onCompleted: {
-        if (file.loaded)
+        if (file.loaded) {
+            stateRead = true;
             restore();
+        }
+    }
+
+    Connections {
+        target: Config
+        function onLoadedChanged() {
+            root.restore();
+        }
     }
 
     FileView {
@@ -238,11 +358,19 @@ Singleton {
         path: Quickshell.statePath("sidebar.json")
         blockLoading: true
         printErrors: false
-        onLoaded: root.restore()
-        onLoadFailed: root.restore()
+        onLoaded: {
+            root.stateRead = true;
+            root.restore();
+        }
+        onLoadFailed: {
+            root.stateRead = true;
+            root.restore();
+        }
 
         JsonAdapter {
             id: state
+            // Mode the sidebars below are stored in
+            property string mode: ""
             property var sidebars: ({})
             property var sides: ({})
             property var widths: ({})
@@ -250,14 +378,21 @@ Singleton {
     }
 
     // Addresses do not survive a Hyprland restart, and a monitor may be gone:
-    // drop what is left of those, and put the rest back in place.
+    // drop what is left of those, and put the rest back in place. A window
+    // left in the stash or docked by no sidebar at all (a state file lost or
+    // out of step) would stay out of reach: it goes back to the tiling layout.
     Process {
         id: check
         command: ["hyprctl", "clients", "-j"]
         stdout: StdioCollector {
             onStreamFinished: {
-                const alive = JSON.parse(text).map(client => client.address);
-                for (const name of Object.keys(root.sidebars)) {
+                const clients = JSON.parse(text);
+                const alive = clients.map(client => client.address);
+                const tracked = Object.keys(root.sidebars).reduce((all, key) => all.concat(root.sidebars[key].windows ?? []), []);
+                const stranded = clients.filter(client => !tracked.includes(client.address) && (client.workspace?.name === "special:sidebar" || (client.tags ?? []).some(tag => tag.replace(/\*$/, "") === "sidebar")));
+                root.run(stranded.map(client => `require("conf/sidebar").release("${client.address}")\n`).join(""));
+                for (const key of Object.keys(root.sidebars)) {
+                    const name = root.screenOf(key);
                     root.windows(name).filter(address => !alive.includes(address)).forEach(address => root.detach(address));
                     if (Quickshell.screens.some(screen => screen.name === name))
                         root.apply(name);

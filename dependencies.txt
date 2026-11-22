@@ -81,6 +81,7 @@ pavucontrol
 pnpm
 pyenv
 python
+python-yaml
 quickshell
 rofi
 silicon
