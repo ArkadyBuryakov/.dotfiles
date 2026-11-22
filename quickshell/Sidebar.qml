@@ -229,6 +229,18 @@ Singleton {
             select(held[(held.indexOf(active(name)) + step + held.length) % held.length], true);
     }
 
+    // Move the tab on show along the tabs of a sidebar, stopping at either end.
+    function shift(name: string, step: int) {
+        const held = windows(name);
+        const from = held.indexOf(active(name));
+        const to = Math.max(0, Math.min(held.length - 1, from + step));
+        if (from < 0 || to === from)
+            return;
+        const order = held.filter(address => address !== held[from]);
+        order.splice(to, 0, held[from]);
+        set(name, Object.assign({}, record(name), { windows: order }));
+    }
+
     // Release every window of a sidebar.
     function dissolve(name: string) {
         // The single sidebar is elsewhere
@@ -452,6 +464,9 @@ Singleton {
                     break;
                 case "cycle":
                     root.cycle(args[0], parseInt(args[1]));
+                    break;
+                case "shift":
+                    root.shift(args[0], parseInt(args[1]));
                     break;
                 }
                 break;

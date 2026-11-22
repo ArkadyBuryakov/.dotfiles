@@ -480,6 +480,18 @@ function M.cycle(offset)
 	end
 end
 
+--- Move the tab on show along the tabs of the sidebar while its window is
+--- focused, and the window along its group otherwise.
+---@param offset 1|-1
+function M.shift(offset)
+	local window = hl.get_active_window()
+	if window and window.monitor and M.is_docked(window) then
+		ask("shift", window.monitor.name, offset)
+	else
+		hl.dispatch(hl.dsp.group.move_window({ forward = offset > 0 }))
+	end
+end
+
 --- Directional focus that also steps into and out of the docked window.
 --- Hyprland itself never crosses between a tiled window and a floating one.
 ---@param direction "left"|"right"|"up"|"down"
