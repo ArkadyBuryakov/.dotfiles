@@ -19,6 +19,10 @@ local OPPOSITE = { left = "right", right = "left" }
 
 local M = {}
 
+-- Address -> { monitor = name, x, y } of each docked window, as show left it
+-- (see sync)
+local placed = {}
+
 -- An empty sidebar looks like the bar: darkened, blurred wallpaper
 -- (quickshell/SidebarBackdrop.qml)
 hl.layer_rule({
@@ -79,23 +83,44 @@ refresh()
 --- also draws pinned windows over fullscreen ones. So a docked window gets
 --- unpinned while its monitor shows a fullscreen window, which leaves it
 --- behind that window, and pinned again once the monitor shows something else.
+---
+--- Hyprland can also leave a pinned window on its own monitor but on the
+--- workspace of another one (as focus moves between monitors while one shows
+--- a special workspace). A pinned window then follows that other monitor's
+--- workspace switches, and ends up off its own monitor: the sidebar
+--- disappears. So a docked window astray from the workspace of the monitor
+--- it was docked on goes back there, to where it was docked.
 function M.sync()
 	for _, dock in ipairs(hl.get_windows({ tag = TAG })) do
-		local monitor = dock.monitor
+		local place = placed[dock.address]
+		local monitor = place and hl.get_monitor(place.monitor) or dock.monitor
 		-- The docked window lives on the regular workspace even while a
 		-- special one is shown over it
 		local home = monitor and monitor.active_workspace
 		local shown = monitor and (monitor.active_special_workspace or home)
 		local fullscreen = shown and shown.fullscreen_mode == 2 and shown.fullscreen_window
 		local covered = fullscreen and fullscreen.address ~= dock.address
+		local astray = home and dock.workspace and dock.workspace.id ~= home.id
 
-		if covered and dock.pinned then
-			hl.dispatch(hl.dsp.window.pin({ window = dock }))
+		if covered and (dock.pinned or astray) then
+			if dock.pinned then
+				hl.dispatch(hl.dsp.window.pin({ window = dock }))
+			end
+			if astray then
+				hl.dispatch(hl.dsp.window.move({ workspace = home.id, follow = false, window = dock }))
+			end
 			hl.dispatch(hl.dsp.window.alter_zorder({ mode = "bottom", window = dock }))
-		elseif home and not covered and not dock.pinned and dock.floating then
+		elseif home and not covered and (astray or not dock.pinned) and dock.floating then
 			-- Changing workspace shifts a floating window, so put it back
 			local x, y = dock.at.x, dock.at.y
-			if dock.workspace and dock.workspace.id ~= home.id then
+			if place then
+				x, y = place.x, place.y
+			end
+			-- Only an unpinned window moves to another workspace
+			if dock.pinned then
+				hl.dispatch(hl.dsp.window.pin({ window = dock }))
+			end
+			if astray then
 				hl.dispatch(hl.dsp.window.move({ workspace = home.id, follow = false, window = dock }))
 			end
 			hl.dispatch(hl.dsp.window.pin({ window = dock }))
@@ -113,6 +138,7 @@ for _, event in ipairs({
 	"window.fullscreen",
 	"window.close",
 	"window.move_to_workspace",
+	"monitor.focused",
 	"workspace.active",
 	"workspace.special_active",
 }) do
@@ -147,20 +173,21 @@ function M.show(address, monitor, side, strip, top, border, focus, warp)
 	if not w.floating then
 		hl.dispatch(hl.dsp.window.float({ action = "enable", window = w }))
 	end
-	-- Out of the stash, or over from another monitor
+	-- Out of the stash, over from another monitor, or astray (see sync)
 	local home = m.active_workspace
-	if home and (not w.monitor or w.monitor.name ~= m.name or (w.workspace and w.workspace.name == STASH)) then
+	if home and (not w.monitor or w.monitor.name ~= m.name or (w.workspace and w.workspace.id ~= home.id)) then
 		if w.pinned then
 			hl.dispatch(hl.dsp.window.pin({ window = w }))
 		end
 		hl.dispatch(hl.dsp.window.move({ workspace = home.id, follow = false, window = w }))
 	end
-	hl.dispatch(hl.dsp.window.tag({ tag = "+" .. TAG, window = w }))
-	M.sync()
 	local left = side == "left" and m.x or m.x + m.width / m.scale - strip
 	local height = m.height / m.scale - m.reserved.top - m.reserved.bottom
 	local x, y = math.floor(left + border), math.floor(m.y + m.reserved.top + top + border)
 	local width, tall = strip - 2 * border, math.floor(height - top - 2 * border)
+	placed[w.address] = { monitor = m.name, x = x, y = y }
+	hl.dispatch(hl.dsp.window.tag({ tag = "+" .. TAG, window = w }))
+	M.sync()
 	hl.dispatch(hl.dsp.window.resize({ x = width, y = tall, window = w }))
 	hl.dispatch(hl.dsp.window.move({ x = x, y = y, window = w }))
 	if focus and warp == false then
@@ -187,6 +214,7 @@ function M.stash(address)
 	if not w or (w.workspace and w.workspace.name == STASH) then
 		return
 	end
+	placed[w.address] = nil
 	hl.dispatch(hl.dsp.window.tag({ tag = "-" .. TAG, window = w }))
 	if w.pinned then
 		hl.dispatch(hl.dsp.window.pin({ window = w }))
@@ -201,6 +229,7 @@ function M.release(address)
 	if not w then
 		return
 	end
+	placed[w.address] = nil
 	-- Nowhere to be tiled: in the stash, or pinned on a monitor that went
 	-- away, which leaves it on none at all. Unpinning or tiling it there
 	-- fails, the latter by taking Hyprland down.
