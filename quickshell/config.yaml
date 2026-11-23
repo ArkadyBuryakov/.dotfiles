@@ -3,4 +3,4 @@
 sidebar:
   # monitor: a sidebar per monitor
   # single:  one sidebar, on whichever monitor it was last opened on
-  mode: monitor
+  mode: single
