@@ -1,4 +1,5 @@
-on-button-left=invoke-default-action
+# invoke the default action, else a "Show in folder" action, else reveal the file/dir the notification refers to
+on-button-left=exec ~/.config/mako/on-click.sh "$id"
 on-button-right=dismiss-all
 default-timeout=10000
 max-history=1000

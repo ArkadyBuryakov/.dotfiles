@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# reveal <path> -- show a file or directory selected in its parent folder, in a
+# NEW Nautilus window.
+#
+# Nautilus has no "new window instead of tab" preference: FileManager1.ShowItems
+# and `nautilus --select` reuse the focused Nautilus window, and --select
+# ignores --new-window. So open the parent in a new window first, wait for it
+# to take focus, then --select into it.
+
+path="$(realpath -e -- "${1:?usage: reveal <path>}")" || exit 1
+parent="$(dirname -- "$path")"
+
+windows() { hyprctl clients -j | jq -r '.[] | select(.class == "org.gnome.Nautilus") | .address'; }
+
+before="$(windows)"
+nautilus --new-window -- "$parent" >/dev/null 2>&1 || exit 1
+
+# wait (up to ~3s) until the new window exists and is focused
+for _ in $(seq 30); do
+  active="$(hyprctl activewindow -j | jq -r 'select(.class == "org.gnome.Nautilus") | .address')"
+  [[ -n "$active" ]] && ! grep -qxF "$active" <<<"$before" && break
+  sleep 0.1
+done
+
+exec nautilus --select -- "$path" >/dev/null 2>&1
