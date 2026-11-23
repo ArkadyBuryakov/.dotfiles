@@ -36,6 +36,10 @@ hl.on("hyprland.start", function()
 	-- Run keyring daemon
 	hl.exec_cmd("kwalletd6")
 
+	-- XDG autostart entries (~/.config/autostart, /etc/xdg/autostart), once
+	-- the tray is up: MEGAsync, 1Password, JetBrains Toolbox, ...
+	hl.exec_cmd("~/.config/hypr/scripts/xdg-autostart.sh")
+
 	-- Setup 1password. Run it with flags so it could show windows and sync X11 clipboard to copy from app
 	hl.exec_cmd("clipsync watch without-notifications")
 end)
