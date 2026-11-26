@@ -98,12 +98,12 @@ async function navigate({ app: id, url }) {
 
 // --- Links opened by an app: hand them to the desktop --------------------------
 
-// Tabs created by an app that have not navigated anywhere real yet: tabId -> app
+// Tabs created by an app that have not navigated anywhere real yet:
+// tabId -> Promise of the source app (null: not an app with external_links)
 const pending = new Map();
 
 function handOff(tabId, url, source) {
-  pending.delete(tabId);
-  if (!/^https?:/.test(url)) return;
+  if (!source || !/^https?:/.test(url)) return;
   const host = hostOf(url);
   // The app's own pop-outs and sign-in stay here
   if (matches(host, source.hosts) || matches(host, config.keep_hosts)) return;
@@ -116,17 +116,27 @@ function handOff(tabId, url, source) {
   }
 }
 
-chrome.webNavigation.onCreatedNavigationTarget.addListener(async (d) => {
-  const source = await chrome.tabs.get(d.sourceTabId).catch(() => null);
-  const app = source && appFor(source.url || "");
-  if (!app || !app[1].external_links) return;
+// Pages that open a blank window and then set its location (Outlook does this
+// for Teams meeting links) navigate before chrome.tabs.get() below resolves,
+// so the tab is registered synchronously and the lookup is awaited later.
+chrome.webNavigation.onCreatedNavigationTarget.addListener((d) => {
+  const source = chrome.tabs
+    .get(d.sourceTabId)
+    .then((tab) => {
+      const app = appFor(tab.url || tab.pendingUrl || "");
+      return app?.[1].external_links ? app[1] : null;
+    })
+    .catch(() => null);
 
-  if (/^https?:/.test(d.url)) handOff(d.tabId, d.url, app[1]);
-  else pending.set(d.tabId, app[1]); // about:blank first, real URL follows
+  if (/^https?:/.test(d.url)) source.then((app) => handOff(d.tabId, d.url, app));
+  else pending.set(d.tabId, source); // about:blank first, real URL follows
 });
 
 chrome.webNavigation.onBeforeNavigate.addListener((d) => {
-  if (d.frameId === 0 && pending.has(d.tabId)) handOff(d.tabId, d.url, pending.get(d.tabId));
+  if (d.frameId !== 0 || !pending.has(d.tabId) || !/^https?:/.test(d.url)) return;
+  const source = pending.get(d.tabId);
+  pending.delete(d.tabId);
+  source.then((app) => handOff(d.tabId, d.url, app));
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => pending.delete(tabId));

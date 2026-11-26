@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Open external links outside Chromium web apps",
   "description": "Links Outlook/Teams open in new tabs go to the system URL handler; Teams links from other apps load in the open Teams window.",
-  "version": "1.1",
+  "version": "1.2",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx3rGIVT0LVgrIeY7PtakBZbbTuUt0oq7EAQycVHMgStc80cvO7Ry0uOBCsRHXUH41CNhFzSbnvvI/XZ5+xSyt40Scl9mnRZ9oK8MOsskrv/RboZ4fRSLhV0B4Z1s6Q0r1dktBBcyAO4T5ypEBTYLLy5IGynObc1gxvYcQ5WCM6DQN0T9yOi7PuHR2Hxs+mJsTNR50aEXQshC85pURbeUr6SthSe6VpG8AiAM5SGpZzj1xTE06YQ3V+dov9Z52TfstPK9kPeNmHUfS7s+XFPErHKJZc1fddpGseUz4VTGrXM6uuEWH2F5QrZSYHDrx6IeHCLTthxZMCCm+JODLNb8wwIDAQAB",
   "permissions": [
     "webNavigation",
