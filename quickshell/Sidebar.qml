@@ -53,6 +53,10 @@ Singleton {
     // Output name -> "left" | "right": the side its sidebar is on, or was the
     // last time. Mirrored like the above
     property var sides: ({})
+    // Output name -> { windows, active, open }: in monitor mode, the sidebar
+    // of a monitor that went away, as it was. Its windows wait in the sidebar
+    // of another monitor until it is back. Mirrored like the above
+    property var parked: ({})
     // The state file has been read back. Not necessarily by the time this
     // is created: after a hot reload the adapter fills in later
     property bool restored: false
@@ -130,6 +134,7 @@ Singleton {
         state.mode = held;
         state.sidebars = sidebars;
         state.sides = sides;
+        state.parked = parked;
         file.writeAdapter();
     }
 
@@ -241,20 +246,118 @@ Singleton {
         set(name, Object.assign({}, record(name), { windows: order }));
     }
 
-    // Release every window of a sidebar.
-    function dissolve(name: string) {
+    // A monitor went away: its sidebar goes over to another one (the focused
+    // one, if left). The single sidebar moves there closed. In monitor mode
+    // the sidebar there takes its windows in as tabs, until the monitor is
+    // back (see unpark).
+    function evacuate(name: string) {
         // The single sidebar is elsewhere
-        if (!isHere(name))
+        if (!isHere(name) || !record(name))
             return;
-        const held = windows(name);
-        const rest = Object.assign({}, sidebars);
-        delete rest[key(name)];
-        sidebars = rest;
+        const others = Quickshell.screens.map(screen => screen.name).filter(other => other !== name);
+        const focused = Hyprland.focusedMonitor?.name ?? "";
+        const target = others.includes(focused) ? focused : (others[0] ?? "");
+        // Nowhere to go: kept as it is until a monitor is back
+        if (!target)
+            return;
+        const sidebar = record(name);
+        if (single) {
+            sidebars = { "*": Object.assign({}, sidebar, { open: false, screen: target }) };
+        } else {
+            const rest = Object.assign({}, sidebars);
+            delete rest[name];
+            // Its own windows: the ones it took in for another monitor
+            // go back there, not here
+            const lent = Object.keys(parked).reduce((all, other) => all.concat(parked[other].windows), []);
+            const own = sidebar.windows.filter(address => !lent.includes(address));
+            const there = rest[target] ?? { windows: [], active: "", open: false };
+            // The sidebar taking them in, as it was: it goes back to that
+            if (own.length > 0)
+                parked = Object.assign({}, parked, {
+                    [name]: Object.assign({}, sidebar, {
+                        windows: own,
+                        host: { screen: target, active: there.active, open: there.open }
+                    })
+                });
+            if (sidebar.windows.length > 0) {
+                const held = there.windows.concat(sidebar.windows.filter(address => !there.windows.includes(address)));
+                // The one on show stays so; a closed sidebar opens on the
+                // window that was on show on the lost monitor
+                const shown = there.open && there.active ? there.active : sidebar.open && sidebar.active ? sidebar.active : (there.active || held[0]);
+                rest[target] = { windows: held, active: shown, open: there.open || sidebar.open };
+            }
+            sidebars = rest;
+        }
         save();
-        // Not right away: on its way out a monitor leaves its workspaces
-        // in no state to tile a window on
-        if (held.length > 0)
-            run(`hl.timer(function()\n${held.map(address => `require("conf/sidebar").release("${address}")\n`).join("")}end, { timeout = 500, type = "oneshot" })`);
+        // Not right away: on its way out a monitor leaves its workspaces and
+        // windows in no state to be moved
+        const script = layout(target, false);
+        if (script)
+            run(`hl.timer(function()\n${script}end, { timeout = 500, type = "oneshot" })`);
+    }
+
+    // A monitor is back: its windows taken in by other sidebars (see
+    // evacuate) return to its own, as it was.
+    function unpark(name: string) {
+        const sidebar = parked[name];
+        if (!sidebar)
+            return;
+        const rest = Object.assign({}, parked);
+        delete rest[name];
+        parked = rest;
+        // Unless released or closed meanwhile
+        const back = sidebar.windows.filter(address => owner(address) !== "");
+        const from = back.map(address => owner(address)).filter((other, i, all) => other !== name && all.indexOf(other) === i);
+        // Still showing one of them, the sidebar that took them in goes back
+        // to how it was before
+        const host = sidebar.host && from.includes(sidebar.host.screen) && back.includes(active(sidebar.host.screen)) ? sidebar.host : null;
+        back.forEach(address => detach(address));
+        if (host) {
+            const left = windows(host.screen);
+            set(host.screen, {
+                windows: left,
+                active: left.includes(host.active) ? host.active : active(host.screen),
+                open: host.open === true && left.length > 0
+            });
+        }
+        const held = back.concat(windows(name).filter(address => !back.includes(address)));
+        set(name, {
+            windows: held,
+            active: held.includes(sidebar.active) ? sidebar.active : (held[0] ?? ""),
+            open: sidebar.open === true && held.length > 0
+        });
+        run(from.map(other => layout(other, false)).join("") + layout(name, false));
+    }
+
+    // Monitors seen last, to tell the ones that are back
+    property var known: []
+
+    function screensChanged() {
+        const names = Quickshell.screens.map(screen => screen.name);
+        const added = names.filter(name => !known.includes(name));
+        known = names;
+        if (!restored)
+            return;
+        for (const name of added) {
+            if (!single && parked[name])
+                unpark(name);
+            else
+                apply(name);
+        }
+    }
+
+    // Once Hyprland has set the monitor up
+    Timer {
+        id: screensSettle
+        interval: 500
+        onTriggered: root.screensChanged()
+    }
+
+    Connections {
+        target: Quickshell
+        function onScreensChanged() {
+            screensSettle.restart();
+        }
     }
 
     // Fit the windows of a sidebar to its state.
@@ -297,6 +400,9 @@ Singleton {
         sidebars = convert(state.sidebars ?? {}, from);
         held = single ? "single" : "monitor";
         sides = state.sides ?? {};
+        // The single sidebar holds every window already
+        parked = single ? {} : (state.parked ?? {});
+        known = Quickshell.screens.map(screen => screen.name);
         restored = true;
         if (from !== held)
             save();
@@ -346,6 +452,8 @@ Singleton {
             return;
         sidebars = convert(sidebars, held);
         held = mode;
+        if (single)
+            parked = {};
         save();
         for (const screen of Quickshell.screens)
             apply(screen.name);
@@ -385,12 +493,15 @@ Singleton {
             property string mode: ""
             property var sidebars: ({})
             property var sides: ({})
+            property var parked: ({})
             property var widths: ({})
         }
     }
 
-    // Addresses do not survive a Hyprland restart, and a monitor may be gone:
-    // drop what is left of those, and put the rest back in place. A window
+    // Addresses do not survive a Hyprland restart, and a monitor may be gone
+    // or back: drop what is left of those, move the sidebars of the monitors
+    // gone to the ones there are (see evacuate), give those back their own
+    // (see unpark), and put the rest back in place. A window
     // left in the stash or docked by no sidebar at all (a state file lost or
     // out of step) would stay out of reach: it goes back to the tiling layout.
     Process {
@@ -403,14 +514,27 @@ Singleton {
                 const tracked = Object.keys(root.sidebars).reduce((all, key) => all.concat(root.sidebars[key].windows ?? []), []);
                 const stranded = clients.filter(client => !tracked.includes(client.address) && (client.workspace?.name === "special:sidebar" || (client.tags ?? []).some(tag => tag.replace(/\*$/, "") === "sidebar")));
                 root.run(stranded.map(client => `require("conf/sidebar").release("${client.address}")\n`).join(""));
+                const present = name => Quickshell.screens.some(screen => screen.name === name);
+                const parked = {};
+                for (const name of Object.keys(root.parked)) {
+                    const windows = root.parked[name].windows.filter(address => alive.includes(address));
+                    if (windows.length > 0)
+                        parked[name] = Object.assign({}, root.parked[name], { windows: windows });
+                }
+                root.parked = parked;
                 for (const key of Object.keys(root.sidebars)) {
                     const name = root.screenOf(key);
                     root.windows(name).filter(address => !alive.includes(address)).forEach(address => root.detach(address));
-                    if (Quickshell.screens.some(screen => screen.name === name))
+                    if (present(name))
                         root.apply(name);
                     else
-                        root.dissolve(name);
+                        root.evacuate(name);
                 }
+                for (const name of Object.keys(root.parked)) {
+                    if (present(name))
+                        root.unpark(name);
+                }
+                root.save();
             }
         }
     }
@@ -436,7 +560,7 @@ Singleton {
                 break;
             }
             case "monitorremoved":
-                root.dissolve(event.data);
+                root.evacuate(event.data);
                 break;
             // From hypr/conf/sidebar.lua
             case "custom": {

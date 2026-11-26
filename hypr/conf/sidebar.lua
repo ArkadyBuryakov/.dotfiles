@@ -176,10 +176,16 @@ function M.show(address, monitor, side, strip, top, border, focus, warp)
 	-- Out of the stash, over from another monitor, or astray (see sync)
 	local home = m.active_workspace
 	if home and (not w.monitor or w.monitor.name ~= m.name or (w.workspace and w.workspace.id ~= home.id)) then
-		if w.pinned then
+		-- Pinned on a monitor that went away: on none at all, where it
+		-- cannot be unpinned, so it moves first (see release)
+		local lost = not w.monitor
+		if w.pinned and not lost then
 			hl.dispatch(hl.dsp.window.pin({ window = w }))
 		end
 		hl.dispatch(hl.dsp.window.move({ workspace = home.id, follow = false, window = w }))
+		if w.pinned and lost then
+			hl.dispatch(hl.dsp.window.pin({ window = w }))
+		end
 	end
 	local left = side == "left" and m.x or m.x + m.width / m.scale - strip
 	local height = m.height / m.scale - m.reserved.top - m.reserved.bottom
@@ -216,10 +222,15 @@ function M.stash(address)
 	end
 	placed[w.address] = nil
 	hl.dispatch(hl.dsp.window.tag({ tag = "-" .. TAG, window = w }))
-	if w.pinned then
+	-- Pinned on a monitor that went away: unpinned once off it (see show)
+	local lost = not w.monitor
+	if w.pinned and not lost then
 		hl.dispatch(hl.dsp.window.pin({ window = w }))
 	end
 	hl.dispatch(hl.dsp.window.move({ workspace = STASH, follow = false, window = w }))
+	if w.pinned and lost then
+		hl.dispatch(hl.dsp.window.pin({ window = w }))
+	end
 end
 
 --- Hand a window of a sidebar back to the tiling layout.
