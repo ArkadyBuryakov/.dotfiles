@@ -72,6 +72,7 @@ nautilus
 networkmanager-strongswan
 nmtui
 noto-fonts
+noto-fonts-cjk
 noto-fonts-emoji
 npm
 obsidian
