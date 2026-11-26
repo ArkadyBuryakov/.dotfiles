@@ -10,7 +10,7 @@ Module {
     id: root
 
     readonly property var actions: [
-        { icon: "\u{F033E}", text: "Lock", command: "hyprlock" },
+        { icon: "\u{F033E}", text: "Lock", command: "loginctl lock-session" },
         { icon: "\u{F04B2}", text: "Suspend", command: "systemctl suspend" },
         { icon: "\u{F0904}", text: "Hibernate", command: "systemctl hybrid-sleep" },
         { icon: "\u{F0343}", text: "Logout", command: "loginctl terminate-user $USER" },
